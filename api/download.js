@@ -57,45 +57,13 @@ export default async function handler(req, res) {
   const cleanTitle = (title || `asi_tube_${videoId || Date.now()}`).replace(/[^a-zA-Z0-9_ -]/g, '').trim().replace(/\s+/g, '_');
   const filename = `${cleanTitle}.${fileExt}`;
 
-  if (directUrl && directUrl.startsWith('http')) {
-    const proxyUrl = `/api/proxy?url=${encodeURIComponent(directUrl)}&filename=${encodeURIComponent(filename)}`;
-    return res.status(200).json({
-      status: 'success',
-      downloadUrl: proxyUrl,
-      directStreamUrl: directUrl,
-      filename: filename,
-      engine: 'direct-cdn'
-    });
-  }
+  // On-site direct stream download URL
+  const streamDownloadUrl = `/api/stream?url=${encodeURIComponent(cleanUrl)}&quality=${encodeURIComponent(quality)}&format=${encodeURIComponent(fileExt)}&audioOnly=${isAudio}&title=${encodeURIComponent(cleanTitle)}`;
 
-  const pyData = await extractWithPython(cleanUrl);
-  if (pyData) {
-    let targetStreamUrl = null;
-    if (isAudio) {
-      targetStreamUrl = pyData.audio_url;
-    } else {
-      const match = (pyData.video_streams || []).find(v => v.quality === quality) || pyData.video_streams?.[0];
-      targetStreamUrl = match?.url || pyData.audio_url;
-    }
-
-    if (targetStreamUrl) {
-      const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetStreamUrl)}&filename=${encodeURIComponent(filename)}`;
-      return res.status(200).json({
-        status: 'success',
-        downloadUrl: proxyUrl,
-        directStreamUrl: targetStreamUrl,
-        filename: filename,
-        engine: 'yt-dlp-live'
-      });
-    }
-  }
-
-  const cloudDownloadUrl = `https://loader.to/api/button/?url=${encodeURIComponent(cleanUrl)}&f=${isAudio ? 'mp3' : (quality || '1080')}`;
-  
   return res.status(200).json({
     status: 'success',
-    downloadUrl: cloudDownloadUrl,
+    downloadUrl: streamDownloadUrl,
     filename: filename,
-    engine: 'cloud-gateway'
+    engine: 'on-site-stream'
   });
 }

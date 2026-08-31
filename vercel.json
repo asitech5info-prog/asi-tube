@@ -10,6 +10,10 @@
       "destination": "/api/download.js"
     },
     {
+      "source": "/api/stream",
+      "destination": "/api/stream.js"
+    },
+    {
       "source": "/api/search",
       "destination": "/api/search.js"
     },

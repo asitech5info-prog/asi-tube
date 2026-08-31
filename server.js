@@ -8,6 +8,7 @@ import infoHandler from './api/info.js';
 import downloadHandler from './api/download.js';
 import searchHandler from './api/search.js';
 import proxyHandler from './api/proxy.js';
+import streamHandler from './api/stream.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +35,7 @@ const adaptHandler = (handler) => async (req, res) => {
 // API Routes
 app.all('/api/info', adaptHandler(infoHandler));
 app.all('/api/download', adaptHandler(downloadHandler));
+app.all('/api/stream', adaptHandler(streamHandler));
 app.all('/api/search', adaptHandler(searchHandler));
 app.all('/api/proxy', adaptHandler(proxyHandler));
 

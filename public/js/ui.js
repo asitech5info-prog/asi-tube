@@ -1,6 +1,7 @@
 // ASI TUBE - UI Rendering and DOM Interactions Layer
 
 const UI = {
+  // Show Toast Notification
   showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer') || this.createToastContainer();
     const toast = document.createElement('div');
@@ -29,6 +30,7 @@ const UI = {
     return container;
   },
 
+  // Render Video Results
   renderResult(data) {
     const resultSection = document.getElementById('resultSection');
     const thumbImg = document.getElementById('resultThumb');
@@ -49,12 +51,14 @@ const UI = {
 
     window.currentVideoData = data;
 
+    // Render default format table (video)
     this.renderVideoFormats(data.formats?.video || [], data);
 
     resultSection.style.display = 'block';
     resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   },
 
+  // Render Video Format Rows
   renderVideoFormats(formats, data) {
     const tbody = document.getElementById('formatTableBody');
     if (!tbody) return;
@@ -86,6 +90,7 @@ const UI = {
     });
   },
 
+  // Render Audio Format Rows
   renderAudioFormats(formats, data) {
     const tbody = document.getElementById('formatTableBody');
     if (!tbody) return;
@@ -112,6 +117,7 @@ const UI = {
     });
   },
 
+  // Render Thumbnail Downloads
   renderThumbnailFormats(thumbnails, data) {
     const tbody = document.getElementById('formatTableBody');
     if (!tbody) return;
@@ -136,6 +142,7 @@ const UI = {
     });
   },
 
+  // Render In-App Search Cards
   renderSearchResults(results) {
     const grid = document.getElementById('searchGrid');
     if (!grid) return;
@@ -170,6 +177,7 @@ const UI = {
     });
   },
 
+  // Conversion / Download Modal
   showDownloadModal(title, quality, format) {
     const modal = document.getElementById('downloadModal');
     const modalTitle = document.getElementById('modalTitle');
@@ -199,10 +207,10 @@ const UI = {
       finish(downloadUrl, filename, directStreamUrl) {
         clearInterval(interval);
         progressBar.style.width = '100%';
-        modalStatus.textContent = 'Your stream is ready! Starting download...';
+        modalStatus.textContent = '⚡ Stream connected! File download in progress...';
         
         let actionButtons = `
-          <a class="btn-convert" style="width: 100%; justify-content: center; text-decoration: none; margin-top: 16px; font-size: 1.05rem;" href="${downloadUrl}" download="${filename || 'video.mp4'}" target="_blank">
+          <a class="btn-convert" style="width: 100%; justify-content: center; text-decoration: none; margin-top: 16px; font-size: 1.05rem;" href="${downloadUrl}" download="${filename || 'video.mp4'}">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             Save File to Device (${filename})
           </a>
@@ -210,23 +218,34 @@ const UI = {
 
         if (directStreamUrl) {
           actionButtons += `
-            <a class="btn-paste" style="width: 100%; justify-content: center; text-decoration: none; margin-top: 8px; text-align: center;" href="${directStreamUrl}" target="_blank" download="${filename}">
-              ⚡ Open Direct Media Stream (Fast Link)
+            <a class="btn-paste" style="width: 100%; justify-content: center; text-decoration: none; margin-top: 8px; text-align: center;" href="${directStreamUrl}" download="${filename}">
+              ⚡ Fast Direct Stream Mirror
             </a>
           `;
         }
 
         downloadActionArea.innerHTML = actionButtons;
 
+        // Auto trigger direct browser download via hidden iframe or anchor
         try {
-          const a = document.createElement('a');
-          a.href = downloadUrl;
-          a.download = filename || 'video.mp4';
-          a.target = '_blank';
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-        } catch (e) {}
+          const downloadFrame = document.getElementById('hiddenDownloadFrame') || (() => {
+            const iframe = document.createElement('iframe');
+            iframe.id = 'hiddenDownloadFrame';
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
+            return iframe;
+          })();
+          downloadFrame.src = downloadUrl;
+        } catch (e) {
+          try {
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = filename || 'video.mp4';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          } catch (e2) {}
+        }
       },
       error(msg) {
         clearInterval(interval);

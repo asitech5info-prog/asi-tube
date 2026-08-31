@@ -6,7 +6,14 @@ def extract(url):
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'extract_flat': False
+        'extract_flat': False,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['ios', 'android', 'web', 'tv_embedded']
+            }
+        },
+        'geo_bypass': True,
+        'nocheckcertificate': True
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)

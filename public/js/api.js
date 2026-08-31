@@ -1,6 +1,7 @@
 // ASI TUBE - Client API Layer with Zero-Bot Direct Stream Architecture
 
 const API = {
+  // Fetch detailed metadata and format matrix
   async getInfo(url) {
     try {
       const res = await fetch('/api/info', {
@@ -19,39 +20,39 @@ const API = {
     }
   },
 
+  // Generate direct download URL
   async getDownload(url, quality, format, audioOnly, title, directUrl) {
+    const cleanTitle = (title || 'video').replace(/[^a-zA-Z0-9_ -]/g, '').trim().replace(/\s+/g, '_');
+    const isAudio = audioOnly === true || audioOnly === 'true' || ['mp3', 'm4a', 'wav', 'flac'].includes(format);
+    const fileExt = isAudio ? (format === 'mp3' ? 'mp3' : (format || 'mp3')) : (format || 'mp4');
+    const filename = `${cleanTitle}.${fileExt}`;
+    const onSiteStreamUrl = `/api/stream?url=${encodeURIComponent(url)}&quality=${encodeURIComponent(quality || '1080')}&format=${encodeURIComponent(fileExt)}&audioOnly=${isAudio}&title=${encodeURIComponent(cleanTitle)}`;
+
     try {
       const res = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, quality, format, audioOnly, title, directUrl })
       });
-      if (!res.ok) {
-        throw new Error('Download resolution failed');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.downloadUrl) {
+          return data;
+        }
       }
-      return await res.json();
     } catch (err) {
-      console.warn('API download endpoint fallback...', err);
-      const cleanTitle = (title || 'video').replace(/[^a-zA-Z0-9_ -]/g, '').trim().replace(/\s+/g, '_');
-      const filename = `${cleanTitle}.${audioOnly ? 'mp3' : (format || 'mp4')}`;
-      
-      if (directUrl) {
-        return {
-          status: 'success',
-          downloadUrl: `/api/proxy?url=${encodeURIComponent(directUrl)}&filename=${encodeURIComponent(filename)}`,
-          directStreamUrl: directUrl,
-          filename: filename
-        };
-      }
-      
-      return {
-        status: 'success',
-        downloadUrl: `https://loader.to/api/button/?url=${encodeURIComponent(url)}&f=${audioOnly ? 'mp3' : (quality || '1080')}`,
-        filename: filename
-      };
+      console.warn('API download endpoint check failed, using direct on-site stream pipeline...', err);
     }
+
+    return {
+      status: 'success',
+      downloadUrl: onSiteStreamUrl,
+      filename: filename,
+      engine: 'on-site-stream'
+    };
   },
 
+  // Direct in-app search
   async search(query) {
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
@@ -64,6 +65,7 @@ const API = {
     }
   },
 
+  // Client-side fallback if network error
   clientFallbackInfo(rawUrl) {
     let videoId = 'dQw4w9WgXcQ';
     const match = rawUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
