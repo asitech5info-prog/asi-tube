@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/info",
+      "destination": "/api/info.js"
+    },
+    {
+      "source": "/api/download",
+      "destination": "/api/download.js"
+    },
+    {
+      "source": "/api/search",
+      "destination": "/api/search.js"
+    },
+    {
+      "source": "/api/proxy",
+      "destination": "/api/proxy.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/public/$1"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "asi-tube",
+  "version": "1.0.0",
+  "description": "ASI TUBE - Next-Gen Ultra-Fast Video & Audio Downloader with Zero Bot Errors and Vercel Serverless Ready",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "youtube-downloader",
+    "asi-tube",
+    "video-downloader",
+    "mp3-converter",
+    "yt-dlp",
+    "vercel",
+    "zero-bot-errors"
+  ],
+  "author": "ASI TECH",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
