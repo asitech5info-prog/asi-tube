@@ -226,26 +226,15 @@ const UI = {
 
         downloadActionArea.innerHTML = actionButtons;
 
-        // Auto trigger direct browser download via hidden iframe or anchor
+        // Auto trigger direct browser download
         try {
-          const downloadFrame = document.getElementById('hiddenDownloadFrame') || (() => {
-            const iframe = document.createElement('iframe');
-            iframe.id = 'hiddenDownloadFrame';
-            iframe.style.display = 'none';
-            document.body.appendChild(iframe);
-            return iframe;
-          })();
-          downloadFrame.src = downloadUrl;
-        } catch (e) {
-          try {
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = filename || 'video.mp4';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-          } catch (e2) {}
-        }
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.setAttribute('download', filename || 'video.mp4');
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => a.remove(), 1000);
+        } catch (e) {}
       },
       error(msg) {
         clearInterval(interval);

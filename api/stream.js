@@ -113,13 +113,8 @@ export default async function handler(req, res) {
 
   let errorOutput = '';
 
-  proc.stdout.on('data', (chunk) => {
-    try {
-      res.write(chunk);
-    } catch (err) {
-      proc.kill();
-    }
-  });
+  // Pipe stdout directly into response stream with backpressure handling
+  proc.stdout.pipe(res);
 
   proc.stderr.on('data', (data) => {
     errorOutput += data.toString();
@@ -138,13 +133,14 @@ export default async function handler(req, res) {
     if (code !== 0 && !res.writableEnded) {
       console.warn(`yt-dlp stream process exited with code ${code}: ${errorOutput}`);
     }
-    res.end();
   });
 
-  // Handle client abort/disconnect
-  req.on('close', () => {
-    if (!proc.killed) {
-      proc.kill('SIGTERM');
+  // Only terminate process if client connection explicitly disconnected prematurely
+  res.on('close', () => {
+    if (!res.writableEnded && !proc.killed) {
+      try {
+        proc.kill();
+      } catch (e) {}
     }
   });
 }
