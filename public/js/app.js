@@ -11,7 +11,6 @@ const App = {
   },
 
   bindEvents() {
-    // Form submit
     const searchForm = document.getElementById('searchForm');
     const urlInput = document.getElementById('urlInput');
     const btnPaste = document.getElementById('btnPaste');
@@ -61,7 +60,7 @@ const App = {
             this.processUrl(text.trim());
           }
         } catch (err) {
-          UI.showToast('Please allow clipboard permission or paste with Ctrl+V', 'info');
+          UI.showToast('Please paste link using Ctrl+V', 'info');
         }
       });
     }
@@ -76,7 +75,6 @@ const App = {
       });
     }
 
-    // Category Tabs
     document.querySelectorAll('.cat-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
@@ -93,7 +91,6 @@ const App = {
       });
     });
 
-    // Format Result Tabs
     document.querySelectorAll('.fmt-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.fmt-tab').forEach(t => t.classList.remove('active'));
@@ -112,7 +109,6 @@ const App = {
       });
     });
 
-    // Preview Player Button
     const btnPreview = document.getElementById('btnPlayPreview');
     if (btnPreview) {
       btnPreview.addEventListener('click', () => {
@@ -122,7 +118,6 @@ const App = {
       });
     }
 
-    // Direct search input in search section
     const inAppSearchForm = document.getElementById('inAppSearchForm');
     const inAppSearchInput = document.getElementById('inAppSearchInput');
     if (inAppSearchForm) {
@@ -133,7 +128,6 @@ const App = {
       });
     }
 
-    // FAQ Accordion
     document.querySelectorAll('.faq-question').forEach(btn => {
       btn.addEventListener('click', () => {
         const item = btn.parentElement;
@@ -165,7 +159,7 @@ const App = {
         throw new Error('No metadata returned');
       }
     } catch (err) {
-      UI.showToast('Could not extract media info. Trying direct fallback...', 'warning');
+      UI.showToast('Extracting stream with fallback...', 'warning');
       const fallback = API.clientFallbackInfo(url);
       UI.renderResult(fallback);
     } finally {
@@ -174,21 +168,22 @@ const App = {
     }
   },
 
-  async triggerDownload(url, quality, format, audioOnly, rawTitle) {
+  async triggerDownload(url, quality, format, audioOnly, rawTitle, encodedDirectUrl) {
     const title = decodeURIComponent(rawTitle || 'video');
+    const directUrl = encodedDirectUrl ? decodeURIComponent(encodedDirectUrl) : null;
     const modalHandler = UI.showDownloadModal(title, quality, format);
 
     try {
-      const result = await API.getDownload(url, quality, format, audioOnly, title);
+      const result = await API.getDownload(url, quality, format, audioOnly, title, directUrl);
       if (result && result.downloadUrl) {
-        modalHandler.finish(result.downloadUrl, result.filename);
-        UI.showToast('Download stream ready!', 'success');
+        modalHandler.finish(result.downloadUrl, result.filename, result.directStreamUrl || directUrl);
+        UI.showToast('Download started!', 'success');
       } else {
         throw new Error('Could not generate download link');
       }
     } catch (err) {
       modalHandler.error('Failed to generate direct download link');
-      UI.showToast('Failed to generate download. Please retry.', 'error');
+      UI.showToast('Please try clicking another format or resolution', 'error');
     }
   },
 
@@ -237,7 +232,6 @@ const App = {
   }
 };
 
-// Global exports
 window.App = App;
 window.UI = UI;
 

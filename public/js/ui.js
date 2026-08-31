@@ -1,7 +1,6 @@
 // ASI TUBE - UI Rendering and DOM Interactions Layer
 
 const UI = {
-  // Show Toast Notification
   showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer') || this.createToastContainer();
     const toast = document.createElement('div');
@@ -30,7 +29,6 @@ const UI = {
     return container;
   },
 
-  // Render Video Results
   renderResult(data) {
     const resultSection = document.getElementById('resultSection');
     const thumbImg = document.getElementById('resultThumb');
@@ -49,17 +47,14 @@ const UI = {
     durationEl.textContent = data.durationFormatted || 'HD Video';
     durationBadge.textContent = data.durationFormatted || 'HD';
 
-    // Store active data
     window.currentVideoData = data;
 
-    // Render default format table (video)
     this.renderVideoFormats(data.formats?.video || [], data);
 
     resultSection.style.display = 'block';
     resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   },
 
-  // Render Video Format Rows
   renderVideoFormats(formats, data) {
     const tbody = document.getElementById('formatTableBody');
     if (!tbody) return;
@@ -72,6 +67,8 @@ const UI = {
       if (fmt.quality === '2160' || fmt.quality === '1440') badgeClass += ' badge-4k';
       else if (fmt.quality === '1080' || fmt.quality === '720') badgeClass += ' badge-hd';
 
+      const directParam = fmt.directUrl ? encodeURIComponent(fmt.directUrl) : '';
+
       tr.innerHTML = `
         <td>
           <span class="${badgeClass}">${fmt.resolution || fmt.quality + 'p'}</span>
@@ -79,7 +76,7 @@ const UI = {
         <td><strong>${(fmt.format || 'mp4').toUpperCase()}</strong></td>
         <td><span style="color: var(--text-secondary)">${fmt.estimatedSize || '~ MB'}</span></td>
         <td style="text-align: right;">
-          <button class="btn-download-format" onclick="App.triggerDownload('${data.url}', '${fmt.quality}', '${fmt.format}', false, '${encodeURIComponent(data.title)}')">
+          <button class="btn-download-format" onclick="App.triggerDownload('${data.url}', '${fmt.quality}', '${fmt.format}', false, '${encodeURIComponent(data.title)}', '${directParam}')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             Download
           </button>
@@ -89,7 +86,6 @@ const UI = {
     });
   },
 
-  // Render Audio Format Rows
   renderAudioFormats(formats, data) {
     const tbody = document.getElementById('formatTableBody');
     if (!tbody) return;
@@ -97,6 +93,8 @@ const UI = {
 
     formats.forEach(fmt => {
       const tr = document.createElement('tr');
+      const directParam = fmt.directUrl ? encodeURIComponent(fmt.directUrl) : '';
+
       tr.innerHTML = `
         <td>
           <span class="quality-badge badge-audio">🎵 ${fmt.bitrate || fmt.quality}</span>
@@ -104,7 +102,7 @@ const UI = {
         <td><strong>${(fmt.format || 'mp3').toUpperCase()}</strong></td>
         <td><span style="color: var(--text-secondary)">${fmt.estimatedSize || '~ MB'}</span></td>
         <td style="text-align: right;">
-          <button class="btn-download-format" onclick="App.triggerDownload('${data.url}', '${fmt.quality}', '${fmt.format}', true, '${encodeURIComponent(data.title)}')">
+          <button class="btn-download-format" onclick="App.triggerDownload('${data.url}', '${fmt.quality}', '${fmt.format}', true, '${encodeURIComponent(data.title)}', '${directParam}')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             Download MP3
           </button>
@@ -114,7 +112,6 @@ const UI = {
     });
   },
 
-  // Render Thumbnail Downloads
   renderThumbnailFormats(thumbnails, data) {
     const tbody = document.getElementById('formatTableBody');
     if (!tbody) return;
@@ -139,7 +136,6 @@ const UI = {
     });
   },
 
-  // Render In-App Search Cards
   renderSearchResults(results) {
     const grid = document.getElementById('searchGrid');
     if (!grid) return;
@@ -174,7 +170,6 @@ const UI = {
     });
   },
 
-  // Conversion / Download Modal
   showDownloadModal(title, quality, format) {
     const modal = document.getElementById('downloadModal');
     const modalTitle = document.getElementById('modalTitle');
@@ -185,36 +180,48 @@ const UI = {
     if (!modal) return;
 
     modalTitle.textContent = title || 'Processing Download';
-    modalStatus.textContent = 'Bypassing bot challenges & extracting high-speed stream...';
-    progressBar.style.width = '25%';
+    modalStatus.textContent = 'Extracting direct high-speed stream...';
+    progressBar.style.width = '35%';
     downloadActionArea.innerHTML = '';
     modal.style.display = 'flex';
 
-    let current = 25;
+    let current = 35;
     const interval = setInterval(() => {
       if (current < 90) {
         current += Math.floor(Math.random() * 15) + 5;
         if (current > 90) current = 90;
         progressBar.style.width = current + '%';
-        if (current > 60) modalStatus.textContent = 'Muxing high-quality audio & video tracks...';
+        if (current > 60) modalStatus.textContent = 'Preparing direct file stream...';
       }
-    }, 250);
+    }, 200);
 
     return {
-      finish(downloadUrl, filename) {
+      finish(downloadUrl, filename, directStreamUrl) {
         clearInterval(interval);
         progressBar.style.width = '100%';
-        modalStatus.textContent = 'Your file is ready for instant download!';
-        downloadActionArea.innerHTML = `
-          <a class="btn-convert" style="width: 100%; justify-content: center; text-decoration: none; margin-top: 16px;" href="${downloadUrl}" download="${filename || 'asi_tube_download'}" target="_blank">
+        modalStatus.textContent = 'Your stream is ready! Starting download...';
+        
+        let actionButtons = `
+          <a class="btn-convert" style="width: 100%; justify-content: center; text-decoration: none; margin-top: 16px; font-size: 1.05rem;" href="${downloadUrl}" download="${filename || 'video.mp4'}" target="_blank">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-            Save File to Device
+            Save File to Device (${filename})
           </a>
         `;
+
+        if (directStreamUrl) {
+          actionButtons += `
+            <a class="btn-paste" style="width: 100%; justify-content: center; text-decoration: none; margin-top: 8px; text-align: center;" href="${directStreamUrl}" target="_blank" download="${filename}">
+              ⚡ Open Direct Media Stream (Fast Link)
+            </a>
+          `;
+        }
+
+        downloadActionArea.innerHTML = actionButtons;
+
         try {
           const a = document.createElement('a');
           a.href = downloadUrl;
-          a.download = filename || 'asi_tube_download';
+          a.download = filename || 'video.mp4';
           a.target = '_blank';
           document.body.appendChild(a);
           a.click();

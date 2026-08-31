@@ -1,22 +1,8 @@
 // API endpoint: /api/download
-// Generates direct high-speed video/audio download links using multi-mirror anti-bot infrastructure.
+// Generates direct high-speed video/audio download links.
 
-const COBALT_MIRRORS = [
-  'https://api.cobalt.tools',
-  'https://co.wuk.sh',
-  'https://cobalt.api.scenexe.io',
-  'https://cobalt-api.kwiatekm.tokyo',
-  'https://dl.khub.win',
-  'https://api.server.garden'
-];
-
-const INVIDIOUS_INSTANCES = [
-  'https://inv.tux.pizza',
-  'https://invidious.nerdvpn.de',
-  'https://invidious.projectsegfau.lt',
-  'https://iv.datura.network',
-  'https://yt.artemislena.eu'
-];
+import { exec } from 'child_process';
+import path from 'path';
 
 function extractYouTubeId(url) {
   if (!url) return null;
@@ -33,113 +19,18 @@ function extractYouTubeId(url) {
   return null;
 }
 
-async function requestCobalt(url, options = {}) {
-  const { quality = '1080', format = 'mp4', audioOnly = false } = options;
-
-  let vQuality = '1080';
-  if (['2160', '1440', '1080', '720', '480', '360', '240', '144'].includes(quality)) {
-    vQuality = quality;
-  } else if (quality === 'max') {
-    vQuality = 'max';
-  }
-
-  const payload = {
-    url: url,
-    videoQuality: vQuality,
-    audioFormat: ['mp3', 'm4a', 'wav', 'opus', 'flac'].includes(format) ? format : 'mp3',
-    downloadMode: audioOnly ? 'audio' : 'auto',
-    youtubeVideoCodec: 'h264'
-  };
-
-  for (const mirror of COBALT_MIRRORS) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 6000);
-      
-      const res = await fetch(mirror, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'User-Agent': 'ASI-Tube/1.0'
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-      clearTimeout(timeout);
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status === 'tunnel' || data.status === 'redirect' || data.status === 'stream' || data.status === 'success') {
-          return {
-            status: 'success',
-            downloadUrl: data.url,
-            filename: data.filename || `asi_tube_${Date.now()}.${format || (audioOnly ? 'mp3' : 'mp4')}`,
-            engine: 'cobalt'
-          };
-        }
-        if (data.status === 'picker' && Array.isArray(data.picker) && data.picker.length > 0) {
-          return {
-            status: 'success',
-            downloadUrl: data.picker[0].url,
-            filename: `asi_tube_${Date.now()}.${format || 'mp4'}`,
-            picker: data.picker,
-            engine: 'cobalt-picker'
-          };
-        }
-      }
-    } catch (e) {
-      // try next mirror
-    }
-  }
-  return null;
-}
-
-async function requestInvidiousStream(videoId, quality, audioOnly) {
-  for (const instance of INVIDIOUS_INSTANCES) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch(`${instance}/api/v1/videos/${videoId}`, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        signal: controller.signal
-      });
-      clearTimeout(timeout);
-
-      if (res.ok) {
-        const data = await res.json();
-        if (audioOnly && Array.isArray(data.adaptiveFormats)) {
-          const audioStream = data.adaptiveFormats.find(f => f.type && f.type.startsWith('audio/'));
-          if (audioStream && audioStream.url) {
-            return {
-              status: 'success',
-              downloadUrl: audioStream.url,
-              filename: `${(data.title || 'audio').replace(/[^a-zA-Z0-9_-]/g, '_')}.m4a`,
-              engine: 'invidious-audio'
-            };
-          }
-        }
-        if (Array.isArray(data.formatStreams) && data.formatStreams.length > 0) {
-          let target = data.formatStreams[0];
-          if (quality) {
-            const found = data.formatStreams.find(s => s.resolution && s.resolution.includes(quality));
-            if (found) target = found;
-          }
-          if (target && target.url) {
-            return {
-              status: 'success',
-              downloadUrl: target.url,
-              filename: `${(data.title || 'video').replace(/[^a-zA-Z0-9_-]/g, '_')}.mp4`,
-              engine: 'invidious-video'
-            };
-          }
-        }
-      }
-    } catch (e) {
-      // try next instance
-    }
-  }
-  return null;
+function extractWithPython(url) {
+  return new Promise((resolve) => {
+    const scriptPath = path.join(process.cwd(), 'extractor.py');
+    exec(`python "${scriptPath}" "${url}"`, { timeout: 15000 }, (err, stdout) => {
+      if (err || !stdout) return resolve(null);
+      try {
+        const data = JSON.parse(stdout.trim());
+        if (data && data.title && !data.error) return resolve(data);
+      } catch (e) {}
+      resolve(null);
+    });
+  });
 }
 
 export default async function handler(req, res) {
@@ -152,41 +43,59 @@ export default async function handler(req, res) {
   }
 
   const params = req.method === 'POST' ? req.body : req.query;
-  const { url, quality = '1080', format = 'mp4', audioOnly = false, title } = params || {};
+  const { url, quality = '1080', format = 'mp4', audioOnly = false, title, directUrl } = params || {};
 
   if (!url || typeof url !== 'string' || !url.trim()) {
     return res.status(400).json({ error: 'Please provide a valid URL' });
   }
 
   const cleanUrl = url.trim();
+  const videoId = extractYouTubeId(cleanUrl);
   const isAudio = audioOnly === true || audioOnly === 'true' || ['mp3', 'm4a', 'wav', 'flac'].includes(format);
+  const fileExt = isAudio ? (format === 'mp3' ? 'mp3' : 'm4a') : (format || 'mp4');
+  
+  const cleanTitle = (title || `asi_tube_${videoId || Date.now()}`).replace(/[^a-zA-Z0-9_ -]/g, '').trim().replace(/\s+/g, '_');
+  const filename = `${cleanTitle}.${fileExt}`;
 
-  let result = await requestCobalt(cleanUrl, {
-    quality: quality,
-    format: format,
-    audioOnly: isAudio
-  });
-
-  if (result) {
-    return res.status(200).json(result);
+  if (directUrl && directUrl.startsWith('http')) {
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(directUrl)}&filename=${encodeURIComponent(filename)}`;
+    return res.status(200).json({
+      status: 'success',
+      downloadUrl: proxyUrl,
+      directStreamUrl: directUrl,
+      filename: filename,
+      engine: 'direct-cdn'
+    });
   }
 
-  const videoId = extractYouTubeId(cleanUrl);
-  if (videoId) {
-    result = await requestInvidiousStream(videoId, quality, isAudio);
-    if (result) {
-      return res.status(200).json(result);
+  const pyData = await extractWithPython(cleanUrl);
+  if (pyData) {
+    let targetStreamUrl = null;
+    if (isAudio) {
+      targetStreamUrl = pyData.audio_url;
+    } else {
+      const match = (pyData.video_streams || []).find(v => v.quality === quality) || pyData.video_streams?.[0];
+      targetStreamUrl = match?.url || pyData.audio_url;
+    }
+
+    if (targetStreamUrl) {
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetStreamUrl)}&filename=${encodeURIComponent(filename)}`;
+      return res.status(200).json({
+        status: 'success',
+        downloadUrl: proxyUrl,
+        directStreamUrl: targetStreamUrl,
+        filename: filename,
+        engine: 'yt-dlp-live'
+      });
     }
   }
 
-  const safeFilename = (title ? title.replace(/[^a-zA-Z0-9_-]/g, '_') : `asi_tube_${videoId || Date.now()}`) + `.${isAudio ? 'mp3' : 'mp4'}`;
+  const cloudDownloadUrl = `https://loader.to/api/button/?url=${encodeURIComponent(cleanUrl)}&f=${isAudio ? 'mp3' : (quality || '1080')}`;
   
   return res.status(200).json({
     status: 'success',
-    downloadUrl: `https://api.cobalt.tools/api/stream?url=${encodeURIComponent(cleanUrl)}&quality=${quality}`,
-    directStream: `https://www.youtube-nocookie.com/embed/${videoId || ''}?autoplay=1`,
-    filename: safeFilename,
-    engine: 'direct-gateway',
-    message: 'Stream generated successfully with zero bot challenges'
+    downloadUrl: cloudDownloadUrl,
+    filename: filename,
+    engine: 'cloud-gateway'
   });
 }

@@ -1,5 +1,8 @@
 // API endpoint: /api/proxy
-// Fast stream proxy & CORS bypass for media previews and direct file triggers.
+// Fast stream proxy & attachment download pipeline.
+
+import http from 'http';
+import https from 'https';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -11,37 +14,60 @@ export default async function handler(req, res) {
   }
 
   const targetUrl = req.query?.url;
-  const filename = req.query?.filename || 'download.mp4';
+  const filename = req.query?.filename || 'video.mp4';
 
   if (!targetUrl) {
     return res.status(400).json({ error: 'Target URL is required' });
   }
 
   try {
-    const headers = {
+    const urlObj = new URL(targetUrl);
+    const client = urlObj.protocol === 'https:' ? https : http;
+
+    const requestHeaders = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     };
+
     if (req.headers.range) {
-      headers['Range'] = req.headers.range;
+      requestHeaders['Range'] = req.headers.range;
     }
 
-    const response = await fetch(targetUrl, { headers });
+    const proxyReq = client.request(targetUrl, {
+      method: 'GET',
+      headers: requestHeaders
+    }, (proxyRes) => {
+      if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
+        return res.redirect(proxyRes.headers.location);
+      }
 
-    if (!response.ok) {
-      return res.redirect(targetUrl);
-    }
+      res.statusCode = proxyRes.statusCode || 200;
 
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
-    res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
-    
-    const contentLength = response.headers.get('content-length');
-    if (contentLength) {
-      res.setHeader('Content-Length', contentLength);
-    }
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+      res.setHeader('Content-Type', proxyRes.headers['content-type'] || (filename.endsWith('.mp3') ? 'audio/mpeg' : 'video/mp4'));
+      
+      if (proxyRes.headers['content-length']) {
+        res.setHeader('Content-Length', proxyRes.headers['content-length']);
+      }
+      if (proxyRes.headers['accept-ranges']) {
+        res.setHeader('Accept-Ranges', proxyRes.headers['accept-ranges']);
+      }
+      if (proxyRes.headers['content-range']) {
+        res.setHeader('Content-Range', proxyRes.headers['content-range']);
+      }
 
-    const buffer = await response.arrayBuffer();
-    return res.send(Buffer.from(buffer));
+      proxyRes.pipe(res);
+    });
+
+    proxyReq.on('error', (err) => {
+      console.error('Proxy request error:', err);
+      if (!res.headersSent) {
+        res.redirect(targetUrl);
+      }
+    });
+
+    proxyReq.end();
   } catch (error) {
-    return res.redirect(targetUrl);
+    console.error('Proxy handler error:', error);
+    res.redirect(targetUrl);
   }
 }
