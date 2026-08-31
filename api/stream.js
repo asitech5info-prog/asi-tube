@@ -32,6 +32,42 @@ function sanitizeFilename(name, ext) {
   return clean;
 }
 
+// Background server-side resolver for Vercel Serverless
+async function resolveCloudStream(url, format, quality, isAudio) {
+  let f = isAudio ? 'mp3' : (quality || '1080');
+  if (['320', '256', '192', '128'].includes(quality)) f = 'mp3';
+  if (format === 'm4a') f = 'm4a';
+
+  const initUrl = 'https://loader.to/ajax/download.php?button=1&start=1&end=1&format=' + encodeURIComponent(f) + '&url=' + encodeURIComponent(url);
+  const res = await fetch(initUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'https://loader.to/'
+    }
+  });
+  if (!res.ok) throw new Error('Init failed');
+  const data = await res.json();
+  if (!data.id) throw new Error('No conversion ID');
+
+  const progressUrl = data.progress_url || ('https://loader.to/ajax/progress.php?id=' + data.id);
+  
+  for (let i = 0; i < 25; i++) {
+    await new Promise(r => setTimeout(r, 1200));
+    const pRes = await fetch(progressUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Referer': 'https://loader.to/'
+      }
+    });
+    if (!pRes.ok) continue;
+    const pData = await pRes.json();
+    if (pData.download_url && pData.download_url.startsWith('http')) {
+      return pData.download_url;
+    }
+  }
+  throw new Error('Timeout waiting for stream');
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -71,76 +107,83 @@ export default async function handler(req, res) {
   };
   const contentType = contentTypes[fileExt] || (isAudio ? 'audio/mpeg' : 'video/mp4');
 
-  // Build yt-dlp arguments
-  const args = [
-    '--no-playlist',
-    '--no-warnings',
-    '--extractor-args', 'youtube:player_client=ios,android,web,tv_embedded',
-    '--geo-bypass'
-  ];
+  // Try local yt-dlp first (if installed in local environment)
+  let localSpawnWorked = false;
+  try {
+    const args = [
+      '--no-playlist',
+      '--no-warnings',
+      '--extractor-args', 'youtube:player_client=ios,android,web,tv_embedded',
+      '--geo-bypass'
+    ];
 
-  if (ffmpegPath && fs.existsSync(ffmpegPath)) {
-    args.push('--ffmpeg-location', ffmpegPath);
-  }
+    if (ffmpegPath && fs.existsSync(ffmpegPath)) {
+      args.push('--ffmpeg-location', ffmpegPath);
+    }
 
-  if (isAudio) {
-    args.push('-x');
-    args.push('--audio-format', fileExt === 'mp3' ? 'mp3' : fileExt);
-    const audioBitrate = quality && ['320', '256', '192', '128'].includes(quality) ? `${quality}k` : '320k';
-    args.push('--audio-quality', audioBitrate);
-  } else {
-    const maxH = parseInt(quality, 10) || 1080;
-    args.push('-f', `bestvideo[height<=${maxH}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${maxH}]+bestaudio/best[height<=${maxH}]/best`);
-    args.push('--postprocessor-args', 'ffmpeg:-movflags frag_keyframe+empty_moov+default_base_moof');
-  }
-
-  // Stream output to stdout
-  args.push('-o', '-');
-  args.push(cleanUrl);
-
-  // Set HTTP headers for direct browser download
-  res.writeHead(200, {
-    'Content-Type': contentType,
-    'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'Transfer-Encoding': 'chunked'
-  });
-
-  const proc = spawn('yt-dlp', args, {
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-
-  let errorOutput = '';
-
-  // Pipe stdout directly into response stream with backpressure handling
-  proc.stdout.pipe(res);
-
-  proc.stderr.on('data', (data) => {
-    errorOutput += data.toString();
-  });
-
-  proc.on('error', (err) => {
-    console.error('yt-dlp stream process error:', err);
-    if (!res.headersSent) {
-      res.status(500).send(`Failed to start download stream: ${err.message}`);
+    if (isAudio) {
+      args.push('-x');
+      args.push('--audio-format', fileExt === 'mp3' ? 'mp3' : fileExt);
+      const audioBitrate = quality && ['320', '256', '192', '128'].includes(quality) ? `${quality}k` : '320k';
+      args.push('--audio-quality', audioBitrate);
     } else {
-      res.end();
+      const maxH = parseInt(quality, 10) || 1080;
+      args.push('-f', `bestvideo[height<=${maxH}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${maxH}]+bestaudio/best[height<=${maxH}]/best`);
+      args.push('--postprocessor-args', 'ffmpeg:-movflags frag_keyframe+empty_moov+default_base_moof');
     }
-  });
 
-  proc.on('close', (code) => {
-    if (code !== 0 && !res.writableEnded) {
-      console.warn(`yt-dlp stream process exited with code ${code}: ${errorOutput}`);
-    }
-  });
+    args.push('-o', '-');
+    args.push(cleanUrl);
 
-  // Only terminate process if client connection explicitly disconnected prematurely
-  res.on('close', () => {
-    if (!res.writableEnded && !proc.killed) {
-      try {
-        proc.kill();
-      } catch (e) {}
+    const proc = spawn('yt-dlp', args, {
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    proc.on('error', async () => {
+      // Local yt-dlp binary missing (e.g. on Vercel) -> Fallback to cloud CDN stream
+      if (!res.headersSent) {
+        try {
+          const directCdn = await resolveCloudStream(cleanUrl, fileExt, quality, isAudio);
+          return res.redirect(302, directCdn);
+        } catch (cloudErr) {
+          return res.status(500).send('Download stream could not be generated.');
+        }
+      }
+    });
+
+    proc.stdout.once('data', (chunk) => {
+      localSpawnWorked = true;
+      if (!res.headersSent) {
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'Transfer-Encoding': 'chunked'
+        });
+      }
+      res.write(chunk);
+      proc.stdout.pipe(res);
+    });
+
+    res.on('close', () => {
+      if (!res.writableEnded && !proc.killed) {
+        try { proc.kill(); } catch (e) {}
+      }
+    });
+
+    return;
+  } catch (err) {
+    console.warn('Local spawn failed, using cloud stream pipeline...', err.message);
+  }
+
+  // Fallback for pure serverless environments (Vercel)
+  try {
+    const directCdn = await resolveCloudStream(cleanUrl, fileExt, quality, isAudio);
+    return res.redirect(302, directCdn);
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).send(`Stream resolution failed: ${err.message}`);
     }
-  });
+  }
 }
