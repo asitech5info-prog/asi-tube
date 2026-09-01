@@ -1,9 +1,6 @@
 // API endpoint: /api/download
 // Generates direct high-speed video/audio download links.
 
-import { exec } from 'child_process';
-import path from 'path';
-
 function extractYouTubeId(url) {
   if (!url) return null;
   const str = url.trim();
@@ -17,20 +14,6 @@ function extractYouTubeId(url) {
     if (match && match[1]) return match[1];
   }
   return null;
-}
-
-function extractWithPython(url) {
-  return new Promise((resolve) => {
-    const scriptPath = path.join(process.cwd(), 'extractor.py');
-    exec(`python "${scriptPath}" "${url}"`, { timeout: 15000 }, (err, stdout) => {
-      if (err || !stdout) return resolve(null);
-      try {
-        const data = JSON.parse(stdout.trim());
-        if (data && data.title && !data.error) return resolve(data);
-      } catch (e) {}
-      resolve(null);
-    });
-  });
 }
 
 // Background server-side resolver for Vercel Serverless & cloud hosting
@@ -82,7 +65,7 @@ export default async function handler(req, res) {
   }
 
   const params = req.method === 'POST' ? req.body : req.query;
-  const { url, quality = '1080', format = 'mp4', audioOnly = false, title, directUrl } = params || {};
+  const { url, quality = '1080', format = 'mp4', audioOnly = false, title } = params || {};
 
   if (!url || typeof url !== 'string' || !url.trim()) {
     return res.status(400).json({ error: 'Please provide a valid URL' });
@@ -96,22 +79,26 @@ export default async function handler(req, res) {
   const cleanTitle = (title || `asi_tube_${videoId || Date.now()}`).replace(/[^a-zA-Z0-9_ -]/g, '').trim().replace(/\s+/g, '_');
   const filename = `${cleanTitle}.${fileExt}`;
 
-  // 1. If running in cloud/Vercel (or VERCEL env variable is set), resolve high-speed direct CDN link
-  try {
-    const cloudStream = await resolveCloudStream(cleanUrl, fileExt, quality, isAudio);
-    if (cloudStream && cloudStream.downloadUrl) {
-      return res.status(200).json({
-        status: 'success',
-        downloadUrl: cloudStream.downloadUrl,
-        filename: filename,
-        engine: 'cloud-cdn'
-      });
+  const isVercel = process.env.VERCEL === '1' || process.env.NOW_REGION != null;
+
+  // 1. In pure Vercel Serverless environment, try high-speed direct cloud resolver
+  if (isVercel) {
+    try {
+      const cloudStream = await resolveCloudStream(cleanUrl, fileExt, quality, isAudio);
+      if (cloudStream && cloudStream.downloadUrl) {
+        return res.status(200).json({
+          status: 'success',
+          downloadUrl: cloudStream.downloadUrl,
+          filename: filename,
+          engine: 'cloud-cdn'
+        });
+      }
+    } catch (err) {
+      console.warn('Cloud resolver fallback to stream endpoint...', err.message);
     }
-  } catch (err) {
-    console.warn('Cloud resolver fallback to local stream endpoint...', err.message);
   }
 
-  // 2. Local / VPS stream endpoint
+  // 2. Primary / Local stream endpoint: H.264 (AVC) + AAC + faststart seeking
   const streamDownloadUrl = `/api/stream?url=${encodeURIComponent(cleanUrl)}&quality=${encodeURIComponent(quality)}&format=${encodeURIComponent(fileExt)}&audioOnly=${isAudio}&title=${encodeURIComponent(cleanTitle)}`;
 
   return res.status(200).json({

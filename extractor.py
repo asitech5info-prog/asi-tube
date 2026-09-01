@@ -47,17 +47,18 @@ def extract(url):
         video_streams = []
         seen_res = set()
         for f in reversed(formats_list):
-            if f.get('vcodec') != 'none' and f.get('url'):
+            if f.get('vcodec') != 'none':
                 height = f.get('height') or 0
                 res_label = f"{height}p" if height else "HD"
                 if height >= 144 and height not in seen_res:
                     seen_res.add(height)
+                    has_audio = f.get('acodec') != 'none' and f.get('acodec') is not None
                     video_streams.append({
                         'quality': str(height),
                         'resolution': f"{height}p" + (" (4K)" if height >= 2160 else " (2K)" if height >= 1440 else " (Full HD)" if height >= 1080 else " (HD)" if height >= 720 else ""),
                         'format': 'mp4' if f.get('ext') == 'mp4' else 'webm',
                         'fps': f.get('fps') or 30,
-                        'url': f.get('url'),
+                        'url': f.get('url') if has_audio else None,
                         'filesize': f.get('filesize') or f.get('filesize_approx')
                     })
         

@@ -1,9 +1,53 @@
 // API endpoint: /api/stream
 // Direct high-speed on-site video/audio streaming and downloading pipeline.
+// Produces 100% Facebook & WhatsApp compatible H.264 (AVC) + AAC MP4 videos with +faststart seeking.
 
 import { spawn } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';
 import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import os from 'os';
+
+// Active download tasks to prevent duplicate downloads for the same media
+const activeJobs = new Map();
+
+// Local cache directory for fast serving and seekable range requests
+const TEMP_DIR = path.join(process.cwd(), 'temp');
+if (!fs.existsSync(TEMP_DIR)) {
+  try {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+  } catch (e) {
+    console.warn('Could not create local temp dir, falling back to os tmpdir', e.message);
+  }
+}
+
+const STORAGE_DIR = fs.existsSync(TEMP_DIR) ? TEMP_DIR : path.join(os.tmpdir(), 'asi_tube');
+if (!fs.existsSync(STORAGE_DIR)) {
+  try {
+    fs.mkdirSync(STORAGE_DIR, { recursive: true });
+  } catch (e) {}
+}
+
+// Clean up cached files older than 1 hour to avoid filling disk
+function cleanupOldCache() {
+  try {
+    const files = fs.readdirSync(STORAGE_DIR);
+    const now = Date.now();
+    for (const f of files) {
+      const fp = path.join(STORAGE_DIR, f);
+      try {
+        const stats = fs.statSync(fp);
+        if (now - stats.mtimeMs > 3600 * 1000) {
+          fs.unlinkSync(fp);
+        }
+      } catch (e) {}
+    }
+  } catch (e) {}
+}
+
+// Periodically run cleanup every 30 minutes
+setInterval(cleanupOldCache, 30 * 60 * 1000);
 
 function extractYouTubeId(url) {
   if (!url) return null;
@@ -32,7 +76,7 @@ function sanitizeFilename(name, ext) {
   return clean;
 }
 
-// Background server-side resolver for Vercel Serverless
+// Background cloud resolver fallback for pure serverless environments (Vercel)
 async function resolveCloudStream(url, format, quality, isAudio) {
   let f = isAudio ? 'mp3' : (quality || '1080');
   if (['320', '256', '192', '128'].includes(quality)) f = 'mp3';
@@ -68,6 +112,61 @@ async function resolveCloudStream(url, format, quality, isAudio) {
   throw new Error('Timeout waiting for stream');
 }
 
+// Serve a fully rendered file with HTTP Range and Content-Length support
+function serveCompleteFile(req, res, filePath, filename, contentType) {
+  try {
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    const safeFilename = encodeURIComponent(filename);
+    const disposition = `attachment; filename="${safeFilename}"; filename*=UTF-8''${safeFilename}`;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+      if (start >= fileSize || end >= fileSize) {
+        res.writeHead(416, {
+          'Content-Range': `bytes */${fileSize}`,
+          'Content-Type': contentType
+        });
+        return res.end();
+      }
+
+      const chunksize = (end - start) + 1;
+      const fileStream = fs.createReadStream(filePath, { start, end });
+
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': contentType,
+        'Content-Disposition': disposition,
+        'Cache-Control': 'public, max-age=3600'
+      });
+
+      fileStream.pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': fileSize,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes',
+        'Content-Disposition': disposition,
+        'Cache-Control': 'public, max-age=3600'
+      });
+
+      fs.createReadStream(filePath).pipe(res);
+    }
+  } catch (err) {
+    console.error('Error streaming cached file:', err);
+    if (!res.headersSent) {
+      res.status(500).send('Internal error streaming file.');
+    }
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -91,9 +190,10 @@ export default async function handler(req, res) {
   }
 
   const cleanUrl = url.trim();
+  const videoId = extractYouTubeId(cleanUrl);
   const isAudio = audioOnly === true || audioOnly === 'true' || ['mp3', 'm4a', 'wav', 'flac'].includes(format);
   const fileExt = isAudio ? (format === 'mp3' ? 'mp3' : (format || 'mp3')) : (format || 'mp4');
-  const filename = sanitizeFilename(title || `asi_tube_${extractYouTubeId(cleanUrl) || Date.now()}`, fileExt);
+  const filename = sanitizeFilename(title || `asi_tube_${videoId || Date.now()}`, fileExt);
 
   // Content type mapping
   const contentTypes = {
@@ -107,9 +207,46 @@ export default async function handler(req, res) {
   };
   const contentType = contentTypes[fileExt] || (isAudio ? 'audio/mpeg' : 'video/mp4');
 
-  // Try local yt-dlp first (if installed in local environment)
-  let localSpawnWorked = false;
-  try {
+  // Compute unique hash key for this media file
+  const hashKey = crypto
+    .createHash('md5')
+    .update(`${videoId || cleanUrl}_${quality}_${fileExt}_${isAudio}`)
+    .digest('hex')
+    .substring(0, 16);
+
+  const targetFilePath = path.join(STORAGE_DIR, `${hashKey}.${fileExt}`);
+
+  // 1. If file already exists and is complete (>10KB), serve it directly
+  if (fs.existsSync(targetFilePath)) {
+    try {
+      const stats = fs.statSync(targetFilePath);
+      if (stats.size > 10240) {
+        return serveCompleteFile(req, res, targetFilePath, filename, contentType);
+      } else {
+        fs.unlinkSync(targetFilePath);
+      }
+    } catch (e) {}
+  }
+
+  // 2. If a download task for this exact file is currently in progress, wait for it
+  if (activeJobs.has(hashKey)) {
+    try {
+      await activeJobs.get(hashKey);
+      if (fs.existsSync(targetFilePath)) {
+        return serveCompleteFile(req, res, targetFilePath, filename, contentType);
+      }
+    } catch (err) {
+      console.warn('Existing active job failed:', err.message);
+    }
+  }
+
+  // 3. Download & process video using yt-dlp + ffmpeg
+  const jobPromise = (async () => {
+    const tempPartPath = `${targetFilePath}.part`;
+    if (fs.existsSync(tempPartPath)) {
+      try { fs.unlinkSync(tempPartPath); } catch (e) {}
+    }
+
     const args = [
       '--no-playlist',
       '--no-warnings',
@@ -126,64 +263,105 @@ export default async function handler(req, res) {
       args.push('--audio-format', fileExt === 'mp3' ? 'mp3' : fileExt);
       const audioBitrate = quality && ['320', '256', '192', '128'].includes(quality) ? `${quality}k` : '320k';
       args.push('--audio-quality', audioBitrate);
+      args.push('-o', tempPartPath);
     } else {
       const maxH = parseInt(quality, 10) || 1080;
-      args.push('-f', `bestvideo[height<=${maxH}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${maxH}]+bestaudio/best[height<=${maxH}]/best`);
-      args.push('--postprocessor-args', 'ffmpeg:-movflags frag_keyframe+empty_moov+default_base_moof');
+
+      // Facebook & WhatsApp video standard:
+      // 1. Strictly prioritize H.264 (avc1) video and AAC (m4a) audio
+      // 2. Fall back to best video + best audio and recode if necessary
+      // 3. Merge output into standard MP4
+      // 4. Apply +faststart to move moov atom to beginning of file for instant forward/seeking
+      args.push('-S', `res:${maxH},vcodec:h264,acodec:m4a`);
+      args.push(
+        '-f',
+        `bestvideo[height<=${maxH}][vcodec^=avc1]+bestaudio[ext=m4a]/` +
+        `bestvideo[height<=${maxH}][vcodec^=avc]+bestaudio[acodec^=mp4a]/` +
+        `bestvideo[height<=${maxH}]+bestaudio/best[height<=${maxH}]/best`
+      );
+      args.push('--merge-output-format', 'mp4');
+      args.push('--recode-video', 'mp4');
+      args.push('--postprocessor-args', 'ffmpeg:-movflags +faststart');
+      args.push('-o', tempPartPath);
     }
 
-    args.push('-o', '-');
     args.push(cleanUrl);
 
-    const proc = spawn('yt-dlp', args, {
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
+    return new Promise((resolve, reject) => {
+      const proc = spawn('yt-dlp', args, {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
 
-    proc.on('error', async () => {
-      // Local yt-dlp binary missing (e.g. on Vercel) -> Fallback to cloud CDN stream
-      if (!res.headersSent) {
-        try {
-          const directCdn = await resolveCloudStream(cleanUrl, fileExt, quality, isAudio);
-          return res.redirect(302, directCdn);
-        } catch (cloudErr) {
-          return res.status(500).send('Download stream could not be generated.');
+      let stderrLog = '';
+      proc.stderr.on('data', (d) => {
+        stderrLog += d.toString();
+      });
+
+      proc.on('error', (err) => {
+        reject(err);
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          // Check if yt-dlp output to tempPartPath or tempPartPath.mp4
+          let finalGeneratedPath = tempPartPath;
+          if (!fs.existsSync(finalGeneratedPath)) {
+            const possibleNames = [
+              `${tempPartPath}.${fileExt}`,
+              tempPartPath.replace(/\\.part$/, `.${fileExt}`),
+              `${tempPartPath}.mp4`,
+              `${tempPartPath}.mp3`,
+              `${tempPartPath}.m4a`
+            ];
+            for (const p of possibleNames) {
+              if (fs.existsSync(p)) {
+                finalGeneratedPath = p;
+                break;
+              }
+            }
+          }
+
+          if (fs.existsSync(finalGeneratedPath)) {
+            try {
+              if (finalGeneratedPath !== targetFilePath) {
+                fs.renameSync(finalGeneratedPath, targetFilePath);
+              }
+              return resolve(targetFilePath);
+            } catch (renameErr) {
+              return resolve(finalGeneratedPath);
+            }
+          }
+          reject(new Error('Processed file not found on disk: ' + stderrLog.slice(-300)));
+        } else {
+          reject(new Error(`yt-dlp exited with code ${code}: ${stderrLog.slice(-300)}`));
         }
-      }
+      });
     });
+  })();
 
-    proc.stdout.once('data', (chunk) => {
-      localSpawnWorked = true;
-      if (!res.headersSent) {
-        res.writeHead(200, {
-          'Content-Type': contentType,
-          'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-          'Transfer-Encoding': 'chunked'
-        });
-      }
-      res.write(chunk);
-      proc.stdout.pipe(res);
-    });
+  activeJobs.set(hashKey, jobPromise);
 
-    res.on('close', () => {
-      if (!res.writableEnded && !proc.killed) {
-        try { proc.kill(); } catch (e) {}
-      }
-    });
-
-    return;
-  } catch (err) {
-    console.warn('Local spawn failed, using cloud stream pipeline...', err.message);
-  }
-
-  // Fallback for pure serverless environments (Vercel)
   try {
-    const directCdn = await resolveCloudStream(cleanUrl, fileExt, quality, isAudio);
-    return res.redirect(302, directCdn);
+    await jobPromise;
+    activeJobs.delete(hashKey);
+
+    if (fs.existsSync(targetFilePath)) {
+      return serveCompleteFile(req, res, targetFilePath, filename, contentType);
+    } else {
+      throw new Error('Completed file could not be verified on disk');
+    }
   } catch (err) {
-    if (!res.headersSent) {
-      res.status(500).send(`Stream resolution failed: ${err.message}`);
+    activeJobs.delete(hashKey);
+    console.warn('Local yt-dlp generation failed or unavailable:', err.message);
+
+    // Fallback for cloud/serverless environment (Vercel) without local yt-dlp
+    try {
+      const directCdn = await resolveCloudStream(cleanUrl, fileExt, quality, isAudio);
+      return res.redirect(302, directCdn);
+    } catch (cloudErr) {
+      if (!res.headersSent) {
+        res.status(500).send(`Video stream generation failed: ${err.message}`);
+      }
     }
   }
 }

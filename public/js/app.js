@@ -176,7 +176,7 @@ const App = {
     try {
       const result = await API.getDownload(url, quality, format, audioOnly, title, directUrl);
       if (result && result.downloadUrl) {
-        modalHandler.finish(result.downloadUrl, result.filename, result.directStreamUrl || directUrl);
+        modalHandler.finish(result.downloadUrl, result.filename);
         UI.showToast('Download started!', 'success');
       } else {
         throw new Error('Could not generate download link');
