@@ -1,240 +1,229 @@
 // ASI TUBE - Main Application Controller
-
-const App = {
-  activeTab: 'video',
-  activeFormatTab: 'video',
-
-  init() {
-    this.bindEvents();
-    this.initTheme();
-    this.loadTrendingVideos();
-  },
-
-  bindEvents() {
-    const searchForm = document.getElementById('searchForm');
-    const urlInput = document.getElementById('urlInput');
-    const btnPaste = document.getElementById('btnPaste');
-    const btnClear = document.getElementById('btnClear');
-    const themeToggle = document.getElementById('themeToggle');
-
-    if (searchForm) {
-      searchForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const val = urlInput.value.trim();
-        if (val) {
-          if (val.startsWith('http://') || val.startsWith('https://')) {
-            this.processUrl(val);
-          } else {
-            this.executeSearch(val);
-          }
-        } else {
-          UI.showToast('Please enter a video URL or search query', 'warning');
-        }
-      });
-    }
-
-    if (urlInput) {
-      urlInput.addEventListener('input', () => {
-        if (btnClear) {
-          btnClear.style.display = urlInput.value ? 'block' : 'none';
-        }
-      });
-    }
-
-    if (btnClear) {
-      btnClear.addEventListener('click', () => {
-        urlInput.value = '';
-        btnClear.style.display = 'none';
-        urlInput.focus();
-      });
-    }
-
-    if (btnPaste) {
-      btnPaste.addEventListener('click', async () => {
-        try {
-          const text = await navigator.clipboard.readText();
-          if (text) {
-            urlInput.value = text.trim();
-            btnClear.style.display = 'block';
-            UI.showToast('Link pasted from clipboard!', 'success');
-            this.processUrl(text.trim());
-          }
-        } catch (err) {
-          UI.showToast('Please paste link using Ctrl+V', 'info');
-        }
-      });
-    }
-
-    if (themeToggle) {
-      themeToggle.addEventListener('click', () => {
-        const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', newTheme);
-        localStorage.setItem('asi_tube_theme', newTheme);
-        UI.showToast(`Switched to ${newTheme} mode`, 'info');
-      });
-    }
-
-    document.querySelectorAll('.cat-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        this.activeTab = tab.dataset.tab;
-        
-        if (this.activeTab === 'mp3') {
-          UI.showToast('Selected MP3 Audio Downloader Mode', 'info');
-        } else if (this.activeTab === 'shorts') {
-          UI.showToast('Selected YouTube Shorts Downloader Mode', 'info');
-        } else if (this.activeTab === 'tiktok') {
-          UI.showToast('Selected TikTok & Reels Downloader Mode', 'info');
-        }
-      });
-    });
-
-    document.querySelectorAll('.fmt-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.fmt-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        this.activeFormatTab = tab.dataset.fmt;
-        
-        if (window.currentVideoData) {
-          if (this.activeFormatTab === 'video') {
-            UI.renderVideoFormats(window.currentVideoData.formats?.video || [], window.currentVideoData);
-          } else if (this.activeFormatTab === 'audio') {
-            UI.renderAudioFormats(window.currentVideoData.formats?.audio || [], window.currentVideoData);
-          } else if (this.activeFormatTab === 'thumbnails') {
-            UI.renderThumbnailFormats(window.currentVideoData.formats?.thumbnails || [], window.currentVideoData);
-          }
-        }
-      });
-    });
-
-    const btnPreview = document.getElementById('btnPlayPreview');
-    if (btnPreview) {
-      btnPreview.addEventListener('click', () => {
-        if (window.currentVideoData?.id) {
-          this.openPreviewPlayer(window.currentVideoData.id);
-        }
-      });
-    }
-
-    const inAppSearchForm = document.getElementById('inAppSearchForm');
-    const inAppSearchInput = document.getElementById('inAppSearchInput');
-    if (inAppSearchForm) {
-      inAppSearchForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const q = inAppSearchInput.value.trim();
-        if (q) this.executeSearch(q);
-      });
-    }
-
-    document.querySelectorAll('.faq-question').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const item = btn.parentElement;
-        item.classList.toggle('active');
-      });
-    });
-  },
-
-  initTheme() {
-    const savedTheme = localStorage.getItem('asi_tube_theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', savedTheme);
-  },
-
-  async processUrl(url) {
-    const loadingBox = document.getElementById('loadingBox');
-    const btnConvert = document.getElementById('btnConvert');
-    const resultSection = document.getElementById('resultSection');
-
-    if (loadingBox) loadingBox.style.display = 'flex';
-    if (btnConvert) btnConvert.disabled = true;
-    if (resultSection) resultSection.style.display = 'none';
-
-    try {
-      const data = await API.getInfo(url);
-      if (data && data.title) {
-        UI.renderResult(data);
-        UI.showToast(`Found: ${data.title.substring(0, 40)}...`, 'success');
-      } else {
-        throw new Error('No metadata returned');
-      }
-    } catch (err) {
-      UI.showToast('Extracting stream with fallback...', 'warning');
-      const fallback = API.clientFallbackInfo(url);
-      UI.renderResult(fallback);
-    } finally {
-      if (loadingBox) loadingBox.style.display = 'none';
-      if (btnConvert) btnConvert.disabled = false;
-    }
-  },
-
-  async triggerDownload(url, quality, format, audioOnly, rawTitle, encodedDirectUrl) {
-    const title = decodeURIComponent(rawTitle || 'video');
-    const directUrl = encodedDirectUrl ? decodeURIComponent(encodedDirectUrl) : null;
-    const modalHandler = UI.showDownloadModal(title, quality, format);
-
-    try {
-      const result = await API.getDownload(url, quality, format, audioOnly, title, directUrl);
-      if (result && result.downloadUrl) {
-        modalHandler.finish(result.downloadUrl, result.filename);
-        UI.showToast('Download started!', 'success');
-      } else {
-        throw new Error('Could not generate download link');
-      }
-    } catch (err) {
-      modalHandler.error('Failed to generate direct download link');
-      UI.showToast('Please try clicking another format or resolution', 'error');
-    }
-  },
-
-  async executeSearch(query) {
-    const searchSection = document.getElementById('searchSection');
-    const searchGrid = document.getElementById('searchGrid');
-    
-    if (searchGrid) {
-      searchGrid.innerHTML = `
-        <div style="grid-column: 1/-1; text-align: center; padding: 40px;">
-          <div class="spinner" style="margin: 0 auto 16px;"></div>
-          <p style="color: var(--text-secondary)">Searching YouTube videos for "${query}"...</p>
-        </div>
-      `;
-    }
-
-    if (searchSection) {
-      searchSection.scrollIntoView({ behavior: 'smooth' });
-    }
-
-    const results = await API.search(query);
-    UI.renderSearchResults(results);
-  },
-
-  async loadTrendingVideos() {
-    const results = await API.search('trending popular music 4k');
-    UI.renderSearchResults(results);
-  },
-
-  openPreviewPlayer(videoId) {
-    const modal = document.getElementById('previewModal');
-    const iframe = document.getElementById('previewIframe');
-    if (modal && iframe) {
-      iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`;
-      modal.style.display = 'flex';
-    }
-  },
-
-  closePreviewPlayer() {
-    const modal = document.getElementById('previewModal');
-    const iframe = document.getElementById('previewIframe');
-    if (modal && iframe) {
-      iframe.src = '';
-      modal.style.display = 'none';
-    }
-  }
-};
-
-window.App = App;
-window.UI = UI;
+// Inspired by ytdown.tools & app.ytdown.to
 
 document.addEventListener('DOMContentLoaded', () => {
-  App.init();
+  const mediaUrl = document.getElementById('media-url');
+  const downloadBtn = document.getElementById('download-btn');
+  const clearBtn = document.getElementById('clear-btn');
+  const errorMessage = document.getElementById('error-message');
+  const resultContainer = document.getElementById('result-container');
+  const loadingContainer = document.getElementById('loading-container');
+  const videoInfo = document.getElementById('video-info');
+  const iframeWrapper = document.getElementById('iframe-wrapper');
+  const themeToggle = document.getElementById('theme-toggle');
+
+  // Helper to get active theme ('light' or 'dark')
+  function getCurrentTheme() {
+    return document.documentElement.classList.contains('light-mode') ? 'light' : 'dark';
+  }
+
+  // Parse and validate YouTube URL (Watch, Short, Playlist, youtu.be, embed)
+  function parseYouTubeUrl(urlStr) {
+    if (!urlStr || typeof urlStr !== 'string') {
+      return { valid: false, message: 'Please enter a video URL.' };
+    }
+
+    try {
+      const trimmed = urlStr.trim();
+      // Handle raw 11-char video ID directly
+      if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
+        return { valid: true, id: trimmed };
+      }
+
+      const parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+      const host = parsed.hostname.toLowerCase();
+      const pathSegments = parsed.pathname.split('/').filter(p => p !== '');
+
+      if (!host.includes('youtube.com') && !host.includes('youtu.be')) {
+        return { valid: false, message: 'Please enter a supported YouTube URL.' };
+      }
+
+      if (pathSegments.some(s => s.toLowerCase() === 'live')) {
+        return { valid: false, message: 'Live stream recordings are not supported.' };
+      }
+
+      let videoId = null;
+      const listId = parsed.searchParams.get('list');
+      const shortsIdx = pathSegments.findIndex(s => s.toLowerCase() === 'shorts');
+
+      if (shortsIdx !== -1 && pathSegments[shortsIdx + 1]) {
+        videoId = pathSegments[shortsIdx + 1].slice(0, 11);
+      } else if (host.includes('youtu.be')) {
+        videoId = pathSegments[0] ? pathSegments[0].slice(0, 11) : null;
+      } else if (parsed.searchParams.get('v')) {
+        videoId = parsed.searchParams.get('v').slice(0, 11);
+      } else {
+        const embedIdx = pathSegments.findIndex(s => ['v', 'embed', 'e'].includes(s.toLowerCase()));
+        if (embedIdx !== -1 && pathSegments[embedIdx + 1]) {
+          videoId = pathSegments[embedIdx + 1].slice(0, 11);
+        }
+      }
+
+      if (videoId && listId) {
+        return { valid: true, id: `${videoId}&list=${listId}` };
+      } else if (videoId) {
+        return { valid: true, id: videoId };
+      } else if (listId) {
+        return { valid: true, id: listId };
+      }
+
+      return { valid: false, message: 'Please enter a valid YouTube video URL.' };
+    } catch (err) {
+      return { valid: false, message: 'Please enter a valid URL (e.g. https://www.youtube.com/watch?v=...).' };
+    }
+  }
+
+  // Handle URL submission
+  async function handleConvert() {
+    if (!mediaUrl || !downloadBtn) return;
+
+    const rawInput = mediaUrl.value.trim();
+    if (errorMessage) errorMessage.classList.add('hidden');
+
+    if (!rawInput) {
+      if (errorMessage) {
+        errorMessage.textContent = 'Please paste a YouTube URL first.';
+        errorMessage.classList.remove('hidden');
+      }
+      mediaUrl.focus();
+      return;
+    }
+
+    const check = parseYouTubeUrl(rawInput);
+    if (!check.valid || !check.id) {
+      if (errorMessage) {
+        errorMessage.textContent = check.message || 'Please enter a valid YouTube URL.';
+        errorMessage.classList.remove('hidden');
+      }
+      return;
+    }
+
+    // Show loading state and scroll smoothly
+    downloadBtn.disabled = true;
+    if (resultContainer) resultContainer.classList.remove('hidden');
+    if (loadingContainer) loadingContainer.classList.remove('hidden');
+    if (videoInfo) videoInfo.classList.add('hidden');
+    if (iframeWrapper) iframeWrapper.innerHTML = '';
+
+    if (resultContainer) {
+      resultContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Brief delay to let the animation show smoothly
+    await new Promise(r => setTimeout(r, 450));
+
+    // Create the widget iframe matching ytdown.tools
+    const iframe = document.createElement('iframe');
+    iframe.className = 'resizingFrame';
+    iframe.referrerPolicy = 'origin-when-cross-origin';
+    iframe.src = `https://bestapi.cc/widget/panel-plus/${check.id}/${getCurrentTheme()}`;
+    iframe.width = '100%';
+    iframe.height = '100%';
+    iframe.setAttribute('allowtransparency', 'true');
+    iframe.setAttribute('scrolling', 'no');
+    iframe.style.border = 'none';
+    iframe.style.display = 'block';
+
+    iframe.onload = () => {
+      try {
+        if (window.iFrameResize) {
+          window.iFrameResize({ log: false, heightCalculationMethod: 'lowestElement' }, '.resizingFrame');
+        }
+      } catch (e) {}
+
+      if (loadingContainer) loadingContainer.classList.add('hidden');
+      if (videoInfo) videoInfo.classList.remove('hidden');
+      downloadBtn.disabled = false;
+
+      if (resultContainer) {
+        resultContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    };
+
+    iframe.onerror = () => {
+      if (loadingContainer) loadingContainer.classList.add('hidden');
+      if (errorMessage) {
+        errorMessage.textContent = 'Could not load video widget. Please check your network and try again.';
+        errorMessage.classList.remove('hidden');
+      }
+      downloadBtn.disabled = false;
+    };
+
+    if (iframeWrapper) {
+      iframeWrapper.appendChild(iframe);
+    }
+  }
+
+  // Theme Toggle Event
+  if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('light-mode');
+      const currentTheme = getCurrentTheme();
+      try {
+        localStorage.setItem('theme', currentTheme);
+      } catch (e) {}
+
+      // Dynamically update embedded widget theme if currently loaded
+      if (iframeWrapper) {
+        const iframe = iframeWrapper.querySelector('iframe');
+        if (iframe && mediaUrl) {
+          const check = parseYouTubeUrl(mediaUrl.value.trim());
+          if (check.valid && check.id) {
+            iframe.src = `https://bestapi.cc/widget/panel-plus/${check.id}/${currentTheme}`;
+          }
+        }
+      }
+    });
+  }
+
+  // Bind Start Button and Enter Key
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', handleConvert);
+  }
+
+  if (mediaUrl) {
+    mediaUrl.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleConvert();
+      }
+    });
+
+    mediaUrl.addEventListener('input', () => {
+      if (errorMessage) errorMessage.classList.add('hidden');
+      if (clearBtn) {
+        if (mediaUrl.value.length > 0) {
+          clearBtn.classList.remove('hidden');
+        } else {
+          clearBtn.classList.add('hidden');
+        }
+      }
+    });
+  }
+
+  // Clear Button
+  if (clearBtn && mediaUrl) {
+    clearBtn.addEventListener('click', () => {
+      mediaUrl.value = '';
+      clearBtn.classList.add('hidden');
+      if (errorMessage) errorMessage.classList.add('hidden');
+      if (resultContainer) resultContainer.classList.add('hidden');
+      if (iframeWrapper) iframeWrapper.innerHTML = '';
+      mediaUrl.focus();
+    });
+  }
+
+  // FAQ Accordion Handlers
+  document.querySelectorAll('.faq-question').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = btn.closest('.faq-item');
+      if (item) {
+        const wasActive = item.classList.contains('active');
+        document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('active'));
+        if (!wasActive) {
+          item.classList.add('active');
+        }
+      }
+    });
+  });
 });

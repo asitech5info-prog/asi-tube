@@ -281,7 +281,7 @@ export default async function handler(req, res) {
       );
       args.push('--merge-output-format', 'mp4');
       args.push('--recode-video', 'mp4');
-      args.push('--postprocessor-args', 'ffmpeg:-movflags +faststart');
+      args.push('--postprocessor-args', 'ffmpeg:-c:v libx264 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart');
       args.push('-o', tempPartPath);
     }
 
