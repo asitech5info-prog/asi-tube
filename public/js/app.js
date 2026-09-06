@@ -1,24 +1,40 @@
-// ASI TUBE - Main Application Controller
-// Inspired by ytdown.tools & app.ytdown.to
+// ASI TUBE - Main Application Controller (Zero Ads / In-App Direct Stream Pipeline)
 
-document.addEventListener('DOMContentLoaded', () => {
-  const mediaUrl = document.getElementById('media-url');
-  const downloadBtn = document.getElementById('download-btn');
-  const clearBtn = document.getElementById('clear-btn');
-  const errorMessage = document.getElementById('error-message');
-  const resultContainer = document.getElementById('result-container');
-  const loadingContainer = document.getElementById('loading-container');
-  const videoInfo = document.getElementById('video-info');
-  const iframeWrapper = document.getElementById('iframe-wrapper');
-  const themeToggle = document.getElementById('theme-toggle');
+const App = {
+  activeFormatTab: 'video',
 
-  // Helper to get active theme ('light' or 'dark')
-  function getCurrentTheme() {
+  init() {
+    this.bindDomElements();
+    this.bindEvents();
+    this.initTheme();
+  },
+
+  bindDomElements() {
+    this.mediaUrl = document.getElementById('media-url');
+    this.downloadBtn = document.getElementById('download-btn');
+    this.clearBtn = document.getElementById('clear-btn');
+    this.errorMessage = document.getElementById('error-message');
+    this.resultContainer = document.getElementById('result-container');
+    this.loadingContainer = document.getElementById('loading-container');
+    this.resultSection = document.getElementById('resultSection');
+    this.themeToggle = document.getElementById('theme-toggle');
+  },
+
+  initTheme() {
+    try {
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme === 'light') {
+        document.documentElement.classList.add('light-mode');
+      }
+    } catch (e) {}
+  },
+
+  getCurrentTheme() {
     return document.documentElement.classList.contains('light-mode') ? 'light' : 'dark';
-  }
+  },
 
-  // Parse and validate YouTube URL (Watch, Short, Playlist, youtu.be, embed)
-  function parseYouTubeUrl(urlStr) {
+  // Parse and validate YouTube URL
+  parseYouTubeUrl(urlStr) {
     if (!urlStr || typeof urlStr !== 'string') {
       return { valid: false, message: 'Please enter a video URL.' };
     }
@@ -27,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const trimmed = urlStr.trim();
       // Handle raw 11-char video ID directly
       if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
-        return { valid: true, id: trimmed };
+        return { valid: true, id: trimmed, cleanUrl: `https://www.youtube.com/watch?v=${trimmed}` };
       }
 
       const parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
@@ -59,171 +75,199 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      if (videoId && listId) {
-        return { valid: true, id: `${videoId}&list=${listId}` };
-      } else if (videoId) {
-        return { valid: true, id: videoId };
-      } else if (listId) {
-        return { valid: true, id: listId };
+      if (videoId) {
+        return {
+          valid: true,
+          id: videoId,
+          cleanUrl: `https://www.youtube.com/watch?v=${videoId}`
+        };
       }
 
       return { valid: false, message: 'Please enter a valid YouTube video URL.' };
     } catch (err) {
       return { valid: false, message: 'Please enter a valid URL (e.g. https://www.youtube.com/watch?v=...).' };
     }
-  }
+  },
 
-  // Handle URL submission
-  async function handleConvert() {
-    if (!mediaUrl || !downloadBtn) return;
-
-    const rawInput = mediaUrl.value.trim();
-    if (errorMessage) errorMessage.classList.add('hidden');
-
-    if (!rawInput) {
-      if (errorMessage) {
-        errorMessage.textContent = 'Please paste a YouTube URL first.';
-        errorMessage.classList.remove('hidden');
-      }
-      mediaUrl.focus();
-      return;
-    }
-
-    const check = parseYouTubeUrl(rawInput);
-    if (!check.valid || !check.id) {
-      if (errorMessage) {
-        errorMessage.textContent = check.message || 'Please enter a valid YouTube URL.';
-        errorMessage.classList.remove('hidden');
+  // Process Video URL Submission
+  async processUrl(inputUrl) {
+    const check = this.parseYouTubeUrl(inputUrl);
+    if (!check.valid) {
+      if (this.errorMessage) {
+        this.errorMessage.textContent = check.message || 'Please enter a valid YouTube URL.';
+        this.errorMessage.classList.remove('hidden');
       }
       return;
     }
 
-    // Show loading state and scroll smoothly
-    downloadBtn.disabled = true;
-    if (resultContainer) resultContainer.classList.remove('hidden');
-    if (loadingContainer) loadingContainer.classList.remove('hidden');
-    if (videoInfo) videoInfo.classList.add('hidden');
-    if (iframeWrapper) iframeWrapper.innerHTML = '';
+    if (this.errorMessage) this.errorMessage.classList.add('hidden');
+    if (this.downloadBtn) this.downloadBtn.disabled = true;
 
-    if (resultContainer) {
-      resultContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Show loading spinner
+    if (this.resultContainer) this.resultContainer.classList.remove('hidden');
+    if (this.loadingContainer) this.loadingContainer.classList.remove('hidden');
+    if (this.resultSection) this.resultSection.classList.add('hidden');
+
+    if (this.resultContainer) {
+      this.resultContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    // Brief delay to let the animation show smoothly
-    await new Promise(r => setTimeout(r, 450));
+    try {
+      const data = await API.getInfo(check.cleanUrl);
+      if (!data || data.error) {
+        throw new Error(data?.error || 'Could not fetch video information');
+      }
 
-    // Create the widget iframe matching ytdown.tools
-    const iframe = document.createElement('iframe');
-    iframe.className = 'resizingFrame';
-    iframe.referrerPolicy = 'origin-when-cross-origin';
-    iframe.src = `https://bestapi.cc/widget/panel-plus/${check.id}/${getCurrentTheme()}`;
-    iframe.width = '100%';
-    iframe.height = '100%';
-    iframe.setAttribute('allowtransparency', 'true');
-    iframe.setAttribute('scrolling', 'no');
-    iframe.style.border = 'none';
-    iframe.style.display = 'block';
+      if (this.loadingContainer) this.loadingContainer.classList.add('hidden');
+      if (this.resultSection) this.resultSection.classList.remove('hidden');
 
-    iframe.onload = () => {
-      try {
-        if (window.iFrameResize) {
-          window.iFrameResize({ log: false, heightCalculationMethod: 'lowestElement' }, '.resizingFrame');
+      // Render native video result details and format options
+      UI.renderResult(data);
+
+      // Set active format tab back to video
+      this.switchFormatTab('video');
+
+    } catch (err) {
+      console.error('Error loading video details:', err);
+      if (this.loadingContainer) this.loadingContainer.classList.add('hidden');
+      if (this.errorMessage) {
+        this.errorMessage.textContent = err.message || 'Failed to extract video formats. Please try again.';
+        this.errorMessage.classList.remove('hidden');
+      }
+    } finally {
+      if (this.downloadBtn) this.downloadBtn.disabled = false;
+    }
+  },
+
+  // Trigger Direct In-App Download (Zero Ads / Zero Popups)
+  async triggerDownload(url, quality, format, audioOnly, encodedTitle, directUrl) {
+    const rawTitle = decodeURIComponent(encodedTitle || 'video');
+    const isAudio = audioOnly === true || audioOnly === 'true';
+    const modalHandler = UI.showDownloadModal(rawTitle, quality, format);
+
+    try {
+      const result = await API.getDownload(url, quality, format, isAudio, rawTitle, directUrl);
+      if (result && result.downloadUrl) {
+        modalHandler.finish(result.downloadUrl, result.filename);
+      } else {
+        throw new Error('Download stream link could not be generated.');
+      }
+    } catch (err) {
+      console.error('Download error:', err);
+      modalHandler.error(err.message || 'Download generation failed. Please try again.');
+    }
+  },
+
+  // Switch Format Tabs (Video / Audio / Thumbnails)
+  switchFormatTab(tabName) {
+    this.activeFormatTab = tabName;
+    document.querySelectorAll('.fmt-tab').forEach(t => {
+      if (t.dataset.fmt === tabName) {
+        t.classList.add('active');
+      } else {
+        t.classList.remove('active');
+      }
+    });
+
+    if (window.currentVideoData) {
+      if (tabName === 'video') {
+        UI.renderVideoFormats(window.currentVideoData.formats?.video || [], window.currentVideoData);
+      } else if (tabName === 'audio') {
+        UI.renderAudioFormats(window.currentVideoData.formats?.audio || [], window.currentVideoData);
+      } else if (tabName === 'thumbnails') {
+        UI.renderThumbnailFormats(window.currentVideoData.formats?.thumbnails || [], window.currentVideoData);
+      }
+    }
+  },
+
+  bindEvents() {
+    // Start Button
+    if (this.downloadBtn) {
+      this.downloadBtn.addEventListener('click', () => {
+        const val = this.mediaUrl?.value.trim();
+        if (!val) {
+          if (this.errorMessage) {
+            this.errorMessage.textContent = 'Please paste a YouTube URL first.';
+            this.errorMessage.classList.remove('hidden');
+          }
+          this.mediaUrl?.focus();
+          return;
         }
-      } catch (e) {}
-
-      if (loadingContainer) loadingContainer.classList.add('hidden');
-      if (videoInfo) videoInfo.classList.remove('hidden');
-      downloadBtn.disabled = false;
-
-      if (resultContainer) {
-        resultContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-    };
-
-    iframe.onerror = () => {
-      if (loadingContainer) loadingContainer.classList.add('hidden');
-      if (errorMessage) {
-        errorMessage.textContent = 'Could not load video widget. Please check your network and try again.';
-        errorMessage.classList.remove('hidden');
-      }
-      downloadBtn.disabled = false;
-    };
-
-    if (iframeWrapper) {
-      iframeWrapper.appendChild(iframe);
+        this.processUrl(val);
+      });
     }
-  }
 
-  // Theme Toggle Event
-  if (themeToggle) {
-    themeToggle.addEventListener('click', () => {
-      document.documentElement.classList.toggle('light-mode');
-      const currentTheme = getCurrentTheme();
-      try {
-        localStorage.setItem('theme', currentTheme);
-      } catch (e) {}
+    // Input Enter Key
+    if (this.mediaUrl) {
+      this.mediaUrl.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const val = this.mediaUrl.value.trim();
+          if (val) this.processUrl(val);
+        }
+      });
 
-      // Dynamically update embedded widget theme if currently loaded
-      if (iframeWrapper) {
-        const iframe = iframeWrapper.querySelector('iframe');
-        if (iframe && mediaUrl) {
-          const check = parseYouTubeUrl(mediaUrl.value.trim());
-          if (check.valid && check.id) {
-            iframe.src = `https://bestapi.cc/widget/panel-plus/${check.id}/${currentTheme}`;
+      this.mediaUrl.addEventListener('input', () => {
+        if (this.errorMessage) this.errorMessage.classList.add('hidden');
+        if (this.clearBtn) {
+          if (this.mediaUrl.value.length > 0) {
+            this.clearBtn.classList.remove('hidden');
+          } else {
+            this.clearBtn.classList.add('hidden');
           }
         }
-      }
+      });
+    }
+
+    // Clear Button
+    if (this.clearBtn && this.mediaUrl) {
+      this.clearBtn.addEventListener('click', () => {
+        this.mediaUrl.value = '';
+        this.clearBtn.classList.add('hidden');
+        if (this.errorMessage) this.errorMessage.classList.add('hidden');
+        if (this.resultContainer) this.resultContainer.classList.add('hidden');
+        if (this.resultSection) this.resultSection.classList.add('hidden');
+        this.mediaUrl.focus();
+      });
+    }
+
+    // Format Tab Buttons
+    document.querySelectorAll('.fmt-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const fmt = tab.dataset.fmt;
+        if (fmt) this.switchFormatTab(fmt);
+      });
     });
-  }
 
-  // Bind Start Button and Enter Key
-  if (downloadBtn) {
-    downloadBtn.addEventListener('click', handleConvert);
-  }
+    // Theme Toggle
+    if (this.themeToggle) {
+      this.themeToggle.addEventListener('click', () => {
+        document.documentElement.classList.toggle('light-mode');
+        const currentTheme = this.getCurrentTheme();
+        try {
+          localStorage.setItem('theme', currentTheme);
+        } catch (e) {}
+      });
+    }
 
-  if (mediaUrl) {
-    mediaUrl.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleConvert();
-      }
-    });
-
-    mediaUrl.addEventListener('input', () => {
-      if (errorMessage) errorMessage.classList.add('hidden');
-      if (clearBtn) {
-        if (mediaUrl.value.length > 0) {
-          clearBtn.classList.remove('hidden');
-        } else {
-          clearBtn.classList.add('hidden');
+    // FAQ Accordions
+    document.querySelectorAll('.faq-question').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = btn.closest('.faq-item');
+        if (item) {
+          const wasActive = item.classList.contains('active');
+          document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('active'));
+          if (!wasActive) {
+            item.classList.add('active');
+          }
         }
-      }
+      });
     });
   }
+};
 
-  // Clear Button
-  if (clearBtn && mediaUrl) {
-    clearBtn.addEventListener('click', () => {
-      mediaUrl.value = '';
-      clearBtn.classList.add('hidden');
-      if (errorMessage) errorMessage.classList.add('hidden');
-      if (resultContainer) resultContainer.classList.add('hidden');
-      if (iframeWrapper) iframeWrapper.innerHTML = '';
-      mediaUrl.focus();
-    });
-  }
+window.App = App;
 
-  // FAQ Accordion Handlers
-  document.querySelectorAll('.faq-question').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const item = btn.closest('.faq-item');
-      if (item) {
-        const wasActive = item.classList.contains('active');
-        document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('active'));
-        if (!wasActive) {
-          item.classList.add('active');
-        }
-      }
-    });
-  });
+document.addEventListener('DOMContentLoaded', () => {
+  App.init();
 });

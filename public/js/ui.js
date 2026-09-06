@@ -210,11 +210,14 @@ const UI = {
         modalStatus.textContent = '⚡ Video ready! Seekable H.264 + AAC MP4 download in progress...';
         
         let actionButtons = `
-          <a class="btn-convert" style="width: 100%; justify-content: center; text-decoration: none; margin-top: 16px; font-size: 1.05rem;" href="${downloadUrl}" download="${filename || 'video.mp4'}">
+          <a class="btn-convert" style="width: 100%; justify-content: center; text-decoration: none; margin-top: 16px; font-size: 1.05rem; padding: 14px 20px; border-radius: 10px;" href="${downloadUrl}" download="${filename || 'video.mp4'}">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-            Save File to Device (${filename})
+            Save File to Device
           </a>
-          <div style="margin-top: 10px; font-size: 0.82rem; color: var(--text-secondary); text-align: center;">
+          <div style="margin-top: 10px; font-size: 0.85rem; color: var(--text-muted); text-align: center; word-break: break-all;">
+            📁 <strong>${filename}</strong>
+          </div>
+          <div style="margin-top: 8px; font-size: 0.82rem; color: var(--text-secondary); text-align: center;">
             ✓ 100% Facebook, WhatsApp & Instagram Ready (H.264 + AAC, Faststart Seekable)
           </div>
         `;
@@ -234,7 +237,7 @@ const UI = {
       error(msg) {
         clearInterval(interval);
         progressBar.style.width = '100%';
-        progressBar.style.background = 'var(--accent-red)';
+        progressBar.style.background = 'var(--error, #ef4444)';
         modalStatus.textContent = msg || 'Could not complete video generation';
       }
     };

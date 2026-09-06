@@ -7,13 +7,10 @@ def extract(url):
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['ios', 'android', 'web', 'tv_embedded']
-            }
-        },
         'geo_bypass': True,
-        'nocheckcertificate': True
+        'nocheckcertificate': True,
+        'js_runtimes': {'node': {}},
+        'remote_components': ['ejs:github']
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
@@ -27,7 +24,7 @@ def extract(url):
         
         formats_list = info.get('formats', [])
         
-        # Extract audio stream
+        # Extract audio streams
         audio_formats = []
         for f in formats_list:
             if f.get('vcodec') == 'none' and f.get('acodec') != 'none' and f.get('url'):
@@ -43,25 +40,43 @@ def extract(url):
         best_audio = sorted(audio_formats, key=lambda x: x.get('abr') or 0, reverse=True)
         best_audio_url = best_audio[0]['url'] if best_audio else None
         
-        # Extract video streams
+        # Extract video streams prioritizing higher quality / bitrate
         video_streams = []
         seen_res = set()
-        for f in reversed(formats_list):
-            if f.get('vcodec') != 'none':
-                height = f.get('height') or 0
-                res_label = f"{height}p" if height else "HD"
-                if height >= 144 and height not in seen_res:
-                    seen_res.add(height)
-                    has_audio = f.get('acodec') != 'none' and f.get('acodec') is not None
-                    video_streams.append({
-                        'quality': str(height),
-                        'resolution': f"{height}p" + (" (4K)" if height >= 2160 else " (2K)" if height >= 1440 else " (Full HD)" if height >= 1080 else " (HD)" if height >= 720 else ""),
-                        'format': 'mp4' if f.get('ext') == 'mp4' else 'webm',
-                        'fps': f.get('fps') or 30,
-                        'url': f.get('url') if has_audio else None,
-                        'filesize': f.get('filesize') or f.get('filesize_approx')
-                    })
         
+        # Sort formats by resolution, fps, then bitrate/size descending
+        valid_video = [
+            f for f in formats_list
+            if f.get('vcodec') != 'none' and f.get('height') and f.get('height') >= 144
+        ]
+        valid_video.sort(
+            key=lambda x: (
+                x.get('height') or 0,
+                1 if (x.get('ext') == 'mp4' or 'avc' in (x.get('vcodec') or '')) else 0,
+                x.get('tbr') or x.get('vbr') or 0,
+                x.get('filesize') or x.get('filesize_approx') or 0
+            ),
+            reverse=True
+        )
+
+        for f in valid_video:
+            height = f.get('height')
+            if height not in seen_res:
+                seen_res.add(height)
+                fps = f.get('fps') or 30
+                fps_label = f"{fps}fps" if fps > 30 else ""
+                tag = " (4K)" if height >= 2160 else " (2K)" if height >= 1440 else " (Full HD)" if height >= 1080 else " (HD)" if height >= 720 else ""
+                resolution_str = f"{height}p{' ' + fps_label if fps_label else ''}{tag}"
+                
+                video_streams.append({
+                    'quality': str(height),
+                    'resolution': resolution_str,
+                    'format': 'mp4',
+                    'fps': fps,
+                    'url': f.get('url'),
+                    'filesize': f.get('filesize') or f.get('filesize_approx')
+                })
+
         video_streams = sorted(video_streams, key=lambda x: int(x['quality']), reverse=True)
 
         return {

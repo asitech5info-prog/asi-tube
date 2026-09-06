@@ -250,8 +250,10 @@ export default async function handler(req, res) {
     const args = [
       '--no-playlist',
       '--no-warnings',
-      '--extractor-args', 'youtube:player_client=ios,android,web,tv_embedded',
-      '--geo-bypass'
+      '--js-runtimes', 'node',
+      '--remote-components', 'ejs:github',
+      '--geo-bypass',
+      '-N', '5'
     ];
 
     if (ffmpegPath && fs.existsSync(ffmpegPath)) {
@@ -267,12 +269,11 @@ export default async function handler(req, res) {
     } else {
       const maxH = parseInt(quality, 10) || 1080;
 
-      // Facebook & WhatsApp video standard:
-      // 1. Strictly prioritize H.264 (avc1) video and AAC (m4a) audio
-      // 2. Fall back to best video + best audio and recode if necessary
-      // 3. Merge output into standard MP4
-      // 4. Apply +faststart to move moov atom to beginning of file for instant forward/seeking
-      args.push('-S', `res:${maxH},vcodec:h264,acodec:m4a`);
+      // Facebook & WhatsApp video standard + True 1080p Full HD:
+      // 1. Prioritize highest-bitrate AVC1 (H.264) video and AAC (m4a) audio
+      // 2. Stream-copy (lossless) directly into MP4 container
+      // 3. Apply +faststart to place moov atom at beginning for instant Windows Photos/Player seeking and Facebook upload
+      args.push('-S', `res:${maxH},vcodec:h264,fps,br`);
       args.push(
         '-f',
         `bestvideo[height<=${maxH}][vcodec^=avc1]+bestaudio[ext=m4a]/` +
@@ -280,8 +281,8 @@ export default async function handler(req, res) {
         `bestvideo[height<=${maxH}]+bestaudio/best[height<=${maxH}]/best`
       );
       args.push('--merge-output-format', 'mp4');
-      args.push('--recode-video', 'mp4');
-      args.push('--postprocessor-args', 'ffmpeg:-c:v libx264 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart');
+      args.push('--remux-video', 'mp4');
+      args.push('--postprocessor-args', 'ffmpeg:-movflags +faststart');
       args.push('-o', tempPartPath);
     }
 
@@ -307,8 +308,9 @@ export default async function handler(req, res) {
           let finalGeneratedPath = tempPartPath;
           if (!fs.existsSync(finalGeneratedPath)) {
             const possibleNames = [
+              targetFilePath,
               `${tempPartPath}.${fileExt}`,
-              tempPartPath.replace(/\\.part$/, `.${fileExt}`),
+              tempPartPath.replace(/\.part$/, `.${fileExt}`),
               `${tempPartPath}.mp4`,
               `${tempPartPath}.mp3`,
               `${tempPartPath}.m4a`

@@ -71,7 +71,7 @@ function calculateEstimatedSize(durationSeconds, quality) {
 function extractWithPython(url) {
   return new Promise((resolve) => {
     const scriptPath = path.join(process.cwd(), 'extractor.py');
-    exec(`python "${scriptPath}" "${url}"`, { timeout: 15000 }, (err, stdout) => {
+    exec(`python "${scriptPath}" "${url}"`, { timeout: 25000 }, (err, stdout) => {
       if (err || !stdout) {
         return resolve(null);
       }
