@@ -1,5 +1,5 @@
 // API endpoint: /api/info
-// Extracts full media details and direct stream links.
+// Extracts full media details and direct stream links for YouTube, Facebook, Instagram Reels, and TikTok (watermark-free).
 
 import { exec } from 'child_process';
 import path from 'path';
@@ -19,8 +19,17 @@ function extractYouTubeId(url) {
   return null;
 }
 
+function detectPlatform(url) {
+  const u = (url || '').toLowerCase();
+  if (u.includes('tiktok.com')) return 'tiktok';
+  if (u.includes('facebook.com') || u.includes('fb.watch') || u.includes('fb.com')) return 'facebook';
+  if (u.includes('instagram.com')) return 'instagram';
+  if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
+  return 'generic';
+}
+
 function formatDuration(seconds) {
-  if (!seconds || isNaN(seconds)) return '0:00';
+  if (!seconds || isNaN(seconds)) return 'HD';
   const sec = parseInt(seconds, 10);
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
@@ -32,12 +41,12 @@ function formatDuration(seconds) {
 }
 
 function formatNumber(num) {
-  if (!num || isNaN(num)) return '0';
+  if (!num || isNaN(num)) return 'Trending';
   const n = parseInt(num, 10);
-  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
-  return n.toLocaleString();
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B views';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M views';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K views';
+  return n.toLocaleString() + ' views';
 }
 
 function formatBytes(bytes) {
@@ -71,8 +80,11 @@ function calculateEstimatedSize(durationSeconds, quality) {
 function extractWithPython(url) {
   return new Promise((resolve) => {
     const scriptPath = path.join(process.cwd(), 'extractor.py');
-    exec(`python "${scriptPath}" "${url}"`, { timeout: 25000 }, (err, stdout) => {
+    // Escape double quotes inside url parameter safely
+    const safeUrl = url.replace(/"/g, '\\"');
+    exec(`python "${scriptPath}" "${safeUrl}"`, { timeout: 35000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err || !stdout) {
+        console.warn('Python extractor warning:', err?.message || stderr);
         return resolve(null);
       }
       try {
@@ -80,7 +92,9 @@ function extractWithPython(url) {
         if (data && data.title && !data.error) {
           return resolve(data);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Failed to parse Python extractor JSON output:', e.message);
+      }
       resolve(null);
     });
   });
@@ -130,12 +144,14 @@ export default async function handler(req, res) {
   }
 
   const cleanUrl = url.trim();
+  const platform = detectPlatform(cleanUrl);
   const videoId = extractYouTubeId(cleanUrl);
 
   let pyData = await extractWithPython(cleanUrl);
 
   if (pyData && pyData.title) {
-    const duration = pyData.duration || 180;
+    const duration = pyData.duration || 60;
+    const detectedPlatform = pyData.platform || platform;
     
     const videoFormats = (pyData.video_streams || []).map(vs => ({
       quality: vs.quality,
@@ -144,51 +160,66 @@ export default async function handler(req, res) {
       fps: vs.fps || 30,
       estimatedSize: vs.filesize ? formatBytes(vs.filesize) : calculateEstimatedSize(duration, vs.quality),
       directUrl: vs.url,
-      note: vs.quality >= 1080 ? 'Full HD' : 'Standard'
+      note: vs.quality >= 1080 ? (detectedPlatform === 'tiktok' ? 'No Watermark Full HD' : 'Full HD') : 'HD'
     }));
 
     const audioFormats = [
       { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: calculateEstimatedSize(duration, '320'), directUrl: pyData.audio_url, note: 'Studio Quality' },
       { quality: '256', bitrate: '256 kbps MP3', format: 'mp3', estimatedSize: calculateEstimatedSize(duration, '256'), directUrl: pyData.audio_url, note: 'High Definition' },
       { quality: '128', bitrate: '128 kbps MP3', format: 'mp3', estimatedSize: calculateEstimatedSize(duration, '128'), directUrl: pyData.audio_url, note: 'Standard MP3' },
-      { quality: 'm4a', bitrate: 'Original M4A / AAC', format: 'm4a', estimatedSize: calculateEstimatedSize(duration, '192'), directUrl: pyData.audio_url, note: 'Direct Audio Stream' }
+      { quality: 'm4a', bitrate: 'Original Audio Stream', format: 'm4a', estimatedSize: calculateEstimatedSize(duration, '192'), directUrl: pyData.audio_url, note: 'Native Audio' }
     ];
 
+    const thumbnails = [];
+    if (pyData.thumbnail) {
+      thumbnails.push({
+        resolution: 'Original HD',
+        quality: 'Cover Art / Thumbnail',
+        url: pyData.thumbnail
+      });
+    }
+    if (videoId) {
+      thumbnails.push(
+        { resolution: '1280x720', quality: 'Ultra HD', url: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` },
+        { resolution: '640x480', quality: 'High Quality', url: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` }
+      );
+    }
+
     return res.status(200).json({
-      id: pyData.id || videoId,
+      id: pyData.id || videoId || `media_${Date.now()}`,
       url: cleanUrl,
+      platform: detectedPlatform,
       title: pyData.title,
+      description: pyData.description || '',
       author: pyData.author,
       authorUrl: '',
       duration: duration,
       durationFormatted: formatDuration(duration),
       views: pyData.views || 0,
       viewsFormatted: formatNumber(pyData.views),
-      thumbnail: pyData.thumbnail || `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+      thumbnail: pyData.thumbnail || (videoId ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` : ''),
       formats: {
         video: videoFormats.length > 0 ? videoFormats : [
-          { quality: '1080', resolution: 'Full HD (1080p60)', format: 'mp4', fps: 60, estimatedSize: calculateEstimatedSize(duration, '1080'), directUrl: null },
-          { quality: '720', resolution: 'HD (720p)', format: 'mp4', fps: 30, estimatedSize: calculateEstimatedSize(duration, '720'), directUrl: null },
-          { quality: '480', resolution: 'SD (480p)', format: 'mp4', fps: 30, estimatedSize: calculateEstimatedSize(duration, '480'), directUrl: null },
-          { quality: '360', resolution: 'Mobile (360p)', format: 'mp4', fps: 30, estimatedSize: calculateEstimatedSize(duration, '360'), directUrl: null }
+          { quality: '1080', resolution: 'Full HD (1080p)', format: 'mp4', fps: 30, estimatedSize: calculateEstimatedSize(duration, '1080'), directUrl: null },
+          { quality: '720', resolution: 'HD (720p)', format: 'mp4', fps: 30, estimatedSize: calculateEstimatedSize(duration, '720'), directUrl: null }
         ],
         audio: audioFormats,
-        thumbnails: [
-          { resolution: '1280x720', quality: 'Ultra HD', url: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` },
-          { resolution: '640x480', quality: 'High Quality', url: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` }
-        ]
+        thumbnails: thumbnails
       },
-      source: 'yt-dlp'
+      source: detectedPlatform === 'tiktok' ? 'tikwm-nowm' : 'yt-dlp'
     });
   }
 
+  // YouTube fallback if Python extractor is unavailable
   if (videoId) {
     const oembedData = await fetchFromOEmbed(videoId, cleanUrl);
     const duration = 180;
     return res.status(200).json({
       id: videoId,
       url: `https://www.youtube.com/watch?v=${videoId}`,
+      platform: 'youtube',
       title: oembedData?.title || `YouTube Video (${videoId})`,
+      description: '',
       author: oembedData?.author || 'YouTube Creator',
       authorUrl: '',
       duration: duration,
@@ -217,24 +248,7 @@ export default async function handler(req, res) {
     });
   }
 
-  return res.status(200).json({
-    id: 'media-' + Date.now().toString(36),
-    url: cleanUrl,
-    title: 'Universal Media Downloader',
-    author: 'Online Media',
-    duration: 60,
-    durationFormatted: 'HD',
-    views: 0,
-    viewsFormatted: 'Viral',
-    thumbnail: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80',
-    formats: {
-      video: [
-        { quality: '1080', resolution: 'Best HD (Original)', format: 'mp4', fps: 60, estimatedSize: '25 MB', directUrl: null }
-      ],
-      audio: [
-        { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '4.5 MB', directUrl: null }
-      ],
-      thumbnails: []
-    }
+  return res.status(400).json({
+    error: `Could not retrieve video details from this link. Please verify that the ${platform !== 'generic' ? platform : ''} video is public.`
   });
 }

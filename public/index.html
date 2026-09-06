@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>YouTube Video Downloader - ASI Tube</title>
-  <meta name="description" content="Download YouTube videos and playlists in 1080p MP4 or high-quality MP3 with ASI Tube. Fast, free, and compatible with Facebook upload & Windows Photos seeking." />
-  <meta name="keywords" content="youtube downloader, youtube to mp4, youtube to mp3, 1080p, facebook video upload, seekable mp4, asi tube" />
+  <title>All-in-One Video Downloader - YouTube, Facebook, Instagram Reels & TikTok - ASI Tube</title>
+  <meta name="description" content="Download YouTube videos, Facebook videos, Instagram Reels, and TikTok videos without watermark in HD / 1080p MP4 or 320kbps MP3. Copy title and description with one click. Fast, free, and watermark-free." />
+  <meta name="keywords" content="youtube downloader, tiktok video without watermark, instagram reel downloader, facebook video download, copy video title, copy description, asi tube, 1080p mp4, 320kbps mp3" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -65,8 +65,19 @@
     <section class="hero">
       <div class="container">
         <div class="hero-content">
-          <h1>YouTube Video Downloader</h1>
-          <p class="hero-subtitle">Convert and download YouTube videos in 1080p MP4 or 320kbps MP3. 100% compatible with Facebook upload and video seeking.</p>
+          <h1>All-in-One Video Downloader</h1>
+          <p class="hero-subtitle">
+            Download videos & reels from <strong>YouTube</strong>, <strong>Facebook</strong>, <strong>Instagram</strong>, and <strong>TikTok</strong> (No Watermark) at maximum quality. Copy titles & descriptions in 1-click.
+          </p>
+
+          <!-- Platform Chips -->
+          <div class="platform-chips">
+            <span class="chip-item active">🌐 All Supported</span>
+            <span class="chip-item">▶️ YouTube (4K / MP3)</span>
+            <span class="chip-item">📘 Facebook HD</span>
+            <span class="chip-item">📸 Instagram Reels</span>
+            <span class="chip-item chip-highlight">🎵 TikTok (No Watermark)</span>
+          </div>
 
           <div class="downloader-card">
             <div class="input-group">
@@ -74,7 +85,7 @@
                 <input
                   type="text"
                   id="media-url"
-                  placeholder="Paste video link here"
+                  placeholder="Paste YouTube, Facebook, Instagram Reel, or TikTok link here..."
                   aria-label="Video URL"
                   autocomplete="off"
                 />
@@ -95,7 +106,7 @@
               </button>
             </div>
 
-            <div id="error-message" class="error-message hidden">Please enter a valid YouTube video URL.</div>
+            <div id="error-message" class="error-message hidden">Please enter a valid video link (YouTube, Facebook, Instagram, or TikTok).</div>
           </div>
 
           <!-- Result Card Area -->
@@ -103,10 +114,10 @@
             <div class="result-card">
               <div id="loading-container" class="loading-container hidden">
                 <div class="spinner-professional"></div>
-                <span class="loading-text-professional">Fetching video details...</span>
+                <span class="loading-text-professional">Extracting video details & streams...</span>
               </div>
 
-              <!-- Native Video Result Card (Zero Ads / Zero Popups) -->
+              <!-- Native Video Result Card -->
               <section id="resultSection" class="result-section hidden">
                 <div class="result-header">
                   <!-- Thumbnail -->
@@ -117,8 +128,21 @@
 
                   <!-- Video Metadata -->
                   <div class="video-info-box">
-                    <h2 id="resultTitle" class="video-title">Video Title</h2>
+                    <div class="video-title-wrap">
+                      <h2 id="resultTitle" class="video-title">Video Title</h2>
+                      <button id="copyTitleBtn" class="btn-copy" type="button" title="Copy Title to Clipboard">
+                        <svg class="copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        <span class="copy-btn-text">Copy Title</span>
+                      </button>
+                    </div>
+
                     <div class="video-meta">
+                      <div class="meta-item">
+                        <span id="resultPlatform" class="platform-badge badge-youtube">YouTube</span>
+                      </div>
                       <div class="meta-item">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                         <span id="resultChannel" class="channel-badge">Creator</span>
@@ -131,6 +155,31 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                         <span id="resultDuration">0:00</span>
                       </div>
+                    </div>
+
+                    <!-- Description Box with Copy Action -->
+                    <div id="videoDescContainer" class="video-desc-container hidden">
+                      <div class="desc-header">
+                        <span class="desc-label">📝 Description</span>
+                        <div class="desc-actions">
+                          <button id="copyDescBtn" class="btn-copy btn-copy-sm" type="button" title="Copy Description to Clipboard">
+                            <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            <span class="copy-btn-text">Copy Description</span>
+                          </button>
+                          <button id="copyBothBtn" class="btn-copy btn-copy-sm" type="button" title="Copy Both Title & Description">
+                            <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                            </svg>
+                            <span class="copy-btn-text">Copy Both</span>
+                          </button>
+                        </div>
+                      </div>
+                      <div id="resultDescription" class="video-description-text collapsed"></div>
+                      <button id="toggleDescBtn" class="btn-toggle-desc" type="button">Show more</button>
                     </div>
                   </div>
                 </div>
@@ -178,14 +227,12 @@
     <!-- About Section -->
     <section id="about" class="section">
       <div class="container">
-        <h2 class="section-title">Free YouTube Downloader</h2>
+        <h2 class="section-title">Free Multi-Platform Video Downloader</h2>
         <div class="about-content">
           <p>
-            ASI Tube is a free YouTube video downloader that lets you download YouTube videos, Shorts, and playlists in MP4 or MP3.
-            Simply copy the link, paste it into the box, choose your preferred format, and download instantly.
-            All MP4 files are rendered using industry-standard H.264 (AVC) video and AAC stereo audio with faststart seeking metadata,
-            making them 100% compatible with Facebook Video uploads, WhatsApp forwarding, Instagram Reels, and seamless forward/reverse scrubbing in Windows Photos and QuickTime.
-            Fast, secure, and completely free with no registration required.
+            ASI Tube is your all-in-one media suite to download videos and audios from <strong>YouTube</strong>, <strong>Facebook</strong>, <strong>Instagram Reels</strong>, and <strong>TikTok without any watermark</strong> at the maximum available resolution.
+            Copy video titles and descriptions with a single click, choose between Full HD MP4 or high-bitrate 320kbps MP3, and save directly to your phone, PC, or Mac.
+            All video files are packaged with standardized H.264 video, AAC audio, and faststart seeking metadata, guaranteeing seamless playback and forward/reverse scrubbing in Windows Photos, QuickTime, and hassle-free uploads to Facebook, WhatsApp, and social apps.
           </p>
         </div>
       </div>
@@ -194,24 +241,24 @@
     <!-- How-To 3-Step Guide -->
     <section id="how-to" class="section bg-alt">
       <div class="container text-center">
-        <h2 class="section-title">How to Download YouTube Videos with ASI Tube</h2>
+        <h2 class="section-title">How to Download in 3 Easy Steps</h2>
         <div class="steps-grid">
           <div class="step-card">
             <div class="step-number">01</div>
-            <h3>Copy URL</h3>
-            <p>Find the YouTube video or Short you want to download and copy its URL from the browser or app.</p>
+            <h3>Copy Link</h3>
+            <p>Copy the video or reel link from YouTube, Facebook, Instagram, or TikTok.</p>
           </div>
 
           <div class="step-card">
             <div class="step-number">02</div>
-            <h3>Paste URL</h3>
-            <p>Paste the video link into the input field above and click the "Start" button.</p>
+            <h3>Paste & Preview</h3>
+            <p>Paste into the input box above and click Start. Preview title, full description, and available formats.</p>
           </div>
 
           <div class="step-card">
             <div class="step-number">03</div>
-            <h3>Download</h3>
-            <p>Select your desired resolution (1080p, 720p, 480p) or MP3 bitrate, and click Download to save the file.</p>
+            <h3>Download or Copy</h3>
+            <p>Download in Full HD MP4 / MP3, or copy the title and description directly to your clipboard.</p>
           </div>
         </div>
       </div>
@@ -220,52 +267,57 @@
     <!-- Features Grid -->
     <section id="features" class="section">
       <div class="container">
-        <h2 class="section-title text-center">Why Choose ASI Tube?</h2>
+        <h2 class="section-title text-center">Powerful Features</h2>
         <div class="features-grid">
           <div class="feature-item">
             <div class="feature-icon">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="8" y1="6" x2="21" y2="6"></line>
-                <line x1="8" y1="12" x2="21" y2="12"></line>
-                <line x1="8" y1="18" x2="21" y2="18"></line>
-                <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                <circle cx="12" cy="12" r="10"></circle>
+                <polygon points="10 8 16 12 10 16 10 8"></polygon>
               </svg>
             </div>
             <div>
-              <h3>Playlist & Shorts Support</h3>
-              <p>Download individual videos, YouTube Shorts, and full playlists with ease. Simply paste the link and grab all formats in seconds.</p>
+              <h3>TikTok Video Without Watermark</h3>
+              <p>Download clean, watermark-free TikTok videos at maximum available resolution (1080p Full HD & 720p HD) along with original background audio MP3.</p>
             </div>
           </div>
 
           <div class="feature-item">
             <div class="feature-icon">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M16 3h5v5"></path>
-                <path d="M4 20L21 3"></path>
-                <path d="M21 16v5h-5"></path>
-                <path d="M15 15l6 6"></path>
-                <path d="M4 4l5 5"></path>
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
               </svg>
             </div>
             <div>
-              <h3>H.264 & MP3 Format Conversion</h3>
-              <p>Convert videos to pristine 320kbps MP3 audio or true H.264 MP4 video. Files are encoded for maximum universal compatibility.</p>
+              <h3>Instagram Reels & Videos</h3>
+              <p>Grab Instagram Reels, videos, and post audio in original crisp quality with full creator captions and high-resolution cover thumbnails.</p>
             </div>
           </div>
 
           <div class="feature-item">
             <div class="feature-icon">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M6 3h12l4 6-10 12L2 9z"></path>
-                <path d="M11 3L8 9l4 12 4-12-3-6"></path>
-                <path d="M2 9h20"></path>
+                <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path>
               </svg>
             </div>
             <div>
-              <h3>Facebook & WhatsApp Ready</h3>
-              <p>All video downloads feature standardized baseline profiles and faststart atom headers, eliminating "unsupported format" errors on Facebook.</p>
+              <h3>Facebook Video & Reels in HD</h3>
+              <p>Download public Facebook videos, Watch clips, and Reels in Full HD (1080p/720p) and SD without compression artifacts.</p>
+            </div>
+          </div>
+
+          <div class="feature-item">
+            <div class="feature-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </div>
+            <div>
+              <h3>1-Click Copy Title & Description</h3>
+              <p>Easily copy the complete video title, creator description, hashtags, or both together with dedicated one-click copy buttons and toast confirmation.</p>
             </div>
           </div>
 
@@ -276,63 +328,20 @@
               </svg>
             </div>
             <div>
-              <h3>Seamless Forward & Reverse Seeking</h3>
-              <p>Forward, rewind, and scrub through videos smoothly in Windows Photos, Movies & TV, QuickTime, and VLC without freezing.</p>
+              <h3>Faststart Seeking & Social Ready</h3>
+              <p>Every MP4 file contains progressive faststart moov atoms, allowing instantaneous scrubbing in Windows Photos and zero-error Facebook/WhatsApp sharing.</p>
             </div>
           </div>
 
           <div class="feature-item">
             <div class="feature-icon">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
               </svg>
             </div>
             <div>
-              <h3>High-Speed Direct Conversion</h3>
-              <p>Files are prepared in seconds via high-throughput cloud streaming pipelines with zero bot blocks or rate limits.</p>
-            </div>
-          </div>
-
-          <div class="feature-item">
-            <div class="feature-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <line x1="19" y1="8" x2="19" y2="14"></line>
-                <line x1="22" y1="11" x2="16" y2="11"></line>
-              </svg>
-            </div>
-            <div>
-              <h3>No Registration Required</h3>
-              <p>No sign-up, email, or passwords needed. Simply paste any link, pick your preferred quality, and save directly to your device.</p>
-            </div>
-          </div>
-
-          <div class="feature-item">
-            <div class="feature-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-                <path d="M21 17a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2"></path>
-              </svg>
-            </div>
-            <div>
-              <h3>Unlimited Downloads</h3>
-              <p>Enjoy unlimited video and audio conversions anytime. No bandwidth throttling, daily caps, or hidden costs.</p>
-            </div>
-          </div>
-
-          <div class="feature-item">
-            <div class="feature-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="4" y="4" width="16" height="11" rx="2" ry="2"></rect>
-                <rect x="9" y="15" width="6" height="5"></rect>
-                <line x1="2" y1="20" x2="22" y2="20"></line>
-              </svg>
-            </div>
-            <div>
-              <h3>All Devices Supported</h3>
-              <p>Works smoothly on Windows, Mac, iPhone (Safari Files), Android (Chrome), and tablets without installing apps.</p>
+              <h3>100% Free & Unlimited</h3>
+              <p>No subscriptions, no registration, no watermarks, and no download limits. Convert and download as many videos as you want.</p>
             </div>
           </div>
         </div>
@@ -346,21 +355,31 @@
         <div class="faq-list">
           <div class="faq-item">
             <button class="faq-question">
-              <span>Is ASI Tube completely free to use?</span>
+              <span>Can I download TikTok videos without watermark?</span>
               <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
             <div class="faq-answer">
-              <p>Yes, ASI Tube is 100% free with unlimited conversions. There are no fees, subscriptions, or hidden paywalls.</p>
+              <p>Yes! When you paste a TikTok video link, ASI Tube automatically extracts the clean, original video stream without any watermark or logo stamp at the maximum available resolution (Full HD / HD), plus the background sound in MP3.</p>
             </div>
           </div>
 
           <div class="faq-item">
             <button class="faq-question">
-              <span>Why does Facebook say "unsupported format" on other downloaders?</span>
+              <span>How do I copy the video title and description?</span>
               <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
             <div class="faq-answer">
-              <p>Many downloaders output fragmented MP4 files (fMP4) or use AV1/VP9 codecs without proper audio muxing. Facebook Video requires standard H.264 (AVC) video with yuv420p color and AAC stereo audio. ASI Tube strictly outputs Facebook-compliant H.264+AAC MP4 files with progressive faststart atoms so your uploads always succeed.</p>
+              <p>Once you paste any video link and click Start, you will see a dedicated "Copy Title" button next to the title, as well as "Copy Description" and "Copy Both" buttons in the description box. Clicking any of them immediately copies the formatted text to your clipboard.</p>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question">
+              <span>Does it support Facebook videos and Instagram Reels?</span>
+              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div class="faq-answer">
+              <p>Yes! Simply paste any public Facebook video/reel URL or Instagram Reel/post URL. You will receive direct downloads in Maximum HD MP4, SD MP4, or MP3 audio.</p>
             </div>
           </div>
 
@@ -370,37 +389,17 @@
               <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
             <div class="faq-answer">
-              <p>Yes! Our videos place the MP4 moov atom at the front of the file (faststart optimization) and include complete sample index tables. This allows Windows Photos, Media Player, and mobile apps to seek backward and forward instantly without freezing or buffering.</p>
+              <p>Yes! Our videos place the MP4 moov atom at the front of the file (faststart optimization). This allows Windows Photos, Media Player, and mobile apps to seek backward and forward smoothly without freezing.</p>
             </div>
           </div>
 
           <div class="faq-item">
             <button class="faq-question">
-              <span>Can I download full 1080p HD videos with sound?</span>
+              <span>Is ASI Tube completely free to use?</span>
               <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
             <div class="faq-answer">
-              <p>Yes! YouTube stores 1080p video and audio tracks separately. ASI Tube automatically muxes the high-definition video track with the AAC audio track so you get a complete, crisp 1080p video with full sound.</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-question">
-              <span>How do I convert a YouTube video to MP3?</span>
-              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </button>
-            <div class="faq-answer">
-              <p>Paste the video URL, click "Start", toggle to the "Audio" tab in the panel, and click "Convert" next to your chosen bitrate (320kbps, 256kbps, 192kbps, or 128kbps) to download immediately.</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-question">
-              <span>Do I need to install an app or extension?</span>
-              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </button>
-            <div class="faq-answer">
-              <p>No software or extension is required. ASI Tube runs entirely inside your browser on desktop and mobile.</p>
+              <p>Yes, ASI Tube is 100% free with unlimited conversions. There are no fees, subscriptions, or hidden paywalls.</p>
             </div>
           </div>
         </div>

@@ -1,5 +1,6 @@
 // API endpoint: /api/stream
 // Direct high-speed on-site video/audio streaming and downloading pipeline.
+// Supports YouTube, Facebook, Instagram Reels, and TikTok (watermark-free).
 // Produces 100% Facebook & WhatsApp compatible H.264 (AVC) + AAC MP4 videos with +faststart seeking.
 
 import { spawn } from 'child_process';
@@ -167,6 +168,100 @@ function serveCompleteFile(req, res, filePath, filename, contentType) {
   }
 }
 
+// Direct stream processor using FFmpeg
+function processDirectStream(directUrl, targetFilePath, isAudio, fileExt, quality) {
+  return new Promise(async (resolve, reject) => {
+    const tempPartPath = `${targetFilePath}.part`;
+    if (fs.existsSync(tempPartPath)) {
+      try { fs.unlinkSync(tempPartPath); } catch (e) {}
+    }
+
+    const bin = ffmpegPath && fs.existsSync(ffmpegPath) ? ffmpegPath : 'ffmpeg';
+    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+
+    let args = [];
+    if (isAudio) {
+      args = [
+        '-y',
+        '-headers', `User-Agent: ${userAgent}\r\n`,
+        '-i', directUrl,
+        '-vn',
+        '-b:a', quality && ['320', '256', '192', '128'].includes(quality) ? `${quality}k` : '320k',
+        tempPartPath
+      ];
+    } else {
+      // First attempt fast stream-copy with +faststart
+      args = [
+        '-y',
+        '-headers', `User-Agent: ${userAgent}\r\n`,
+        '-i', directUrl,
+        '-c', 'copy',
+        '-movflags', '+faststart',
+        tempPartPath
+      ];
+    }
+
+    const proc = spawn(bin, args);
+    let stderrLog = '';
+    proc.stderr.on('data', d => { stderrLog += d.toString(); });
+
+    proc.on('close', async (code) => {
+      if (code === 0 && fs.existsSync(tempPartPath) && fs.statSync(tempPartPath).size > 1024) {
+        try {
+          fs.renameSync(tempPartPath, targetFilePath);
+          return resolve(targetFilePath);
+        } catch (e) {
+          return resolve(tempPartPath);
+        }
+      }
+
+      // If ffmpeg copy failed, fallback to direct fetch and save
+      try {
+        const fetchRes = await fetch(directUrl, {
+          headers: { 'User-Agent': userAgent }
+        });
+        if (fetchRes.ok) {
+          const fileStream = fs.createWriteStream(tempPartPath);
+          const reader = fetchRes.body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            fileStream.write(Buffer.from(value));
+          }
+          fileStream.end();
+          await new Promise(r => fileStream.on('finish', r));
+          fs.renameSync(tempPartPath, targetFilePath);
+          return resolve(targetFilePath);
+        }
+      } catch (fetchErr) {
+        console.warn('Direct fetch fallback failed:', fetchErr.message);
+      }
+
+      reject(new Error(`Direct stream processing failed: ${stderrLog.slice(-200)}`));
+    });
+
+    proc.on('error', async (err) => {
+      // If ffmpeg not found, direct fetch
+      try {
+        const fetchRes = await fetch(directUrl, { headers: { 'User-Agent': userAgent } });
+        if (fetchRes.ok) {
+          const fileStream = fs.createWriteStream(targetFilePath);
+          const reader = fetchRes.body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            fileStream.write(Buffer.from(value));
+          }
+          fileStream.end();
+          await new Promise(r => fileStream.on('finish', r));
+          return resolve(targetFilePath);
+        }
+      } catch (e) {}
+      reject(err);
+    });
+  });
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -182,7 +277,8 @@ export default async function handler(req, res) {
     quality = '1080',
     format = 'mp4',
     audioOnly = false,
-    title = ''
+    title = '',
+    directUrl = ''
   } = params || {};
 
   if (!url || typeof url !== 'string' || !url.trim()) {
@@ -190,6 +286,7 @@ export default async function handler(req, res) {
   }
 
   const cleanUrl = url.trim();
+  const cleanDirectUrl = typeof directUrl === 'string' ? directUrl.trim() : '';
   const videoId = extractYouTubeId(cleanUrl);
   const isAudio = audioOnly === true || audioOnly === 'true' || ['mp3', 'm4a', 'wav', 'flac'].includes(format);
   const fileExt = isAudio ? (format === 'mp3' ? 'mp3' : (format || 'mp3')) : (format || 'mp4');
@@ -208,9 +305,10 @@ export default async function handler(req, res) {
   const contentType = contentTypes[fileExt] || (isAudio ? 'audio/mpeg' : 'video/mp4');
 
   // Compute unique hash key for this media file
+  const hashSource = cleanDirectUrl ? cleanDirectUrl : `${videoId || cleanUrl}_${quality}_${fileExt}_${isAudio}`;
   const hashKey = crypto
     .createHash('md5')
-    .update(`${videoId || cleanUrl}_${quality}_${fileExt}_${isAudio}`)
+    .update(hashSource)
     .digest('hex')
     .substring(0, 16);
 
@@ -240,8 +338,13 @@ export default async function handler(req, res) {
     }
   }
 
-  // 3. Download & process video using yt-dlp + ffmpeg
+  // 3. Download & process video
   const jobPromise = (async () => {
+    // If a direct stream URL was provided (e.g. TikTok watermark-free, Facebook, or Instagram direct link)
+    if (cleanDirectUrl && cleanDirectUrl.startsWith('http')) {
+      return await processDirectStream(cleanDirectUrl, targetFilePath, isAudio, fileExt, quality);
+    }
+
     const tempPartPath = `${targetFilePath}.part`;
     if (fs.existsSync(tempPartPath)) {
       try { fs.unlinkSync(tempPartPath); } catch (e) {}
@@ -269,10 +372,8 @@ export default async function handler(req, res) {
     } else {
       const maxH = parseInt(quality, 10) || 1080;
 
-      // Facebook & WhatsApp video standard + True 1080p Full HD:
-      // 1. Prioritize highest-bitrate AVC1 (H.264) video and AAC (m4a) audio
-      // 2. Stream-copy (lossless) directly into MP4 container
-      // 3. Apply +faststart to place moov atom at beginning for instant Windows Photos/Player seeking and Facebook upload
+      // Facebook, WhatsApp & mobile video standard:
+      // Stream-copy or transcode to H.264 (AVC) + AAC MP4 with faststart seeking
       args.push('-S', `res:${maxH},vcodec:h264,fps,br`);
       args.push(
         '-f',
@@ -304,7 +405,6 @@ export default async function handler(req, res) {
 
       proc.on('close', (code) => {
         if (code === 0) {
-          // Check if yt-dlp output to tempPartPath or tempPartPath.mp4
           let finalGeneratedPath = tempPartPath;
           if (!fs.existsSync(finalGeneratedPath)) {
             const possibleNames = [
@@ -354,10 +454,13 @@ export default async function handler(req, res) {
     }
   } catch (err) {
     activeJobs.delete(hashKey);
-    console.warn('Local yt-dlp generation failed or unavailable:', err.message);
+    console.warn('Stream processing error:', err.message);
 
     // Fallback for cloud/serverless environment (Vercel) without local yt-dlp
     try {
+      if (cleanDirectUrl) {
+        return res.redirect(302, cleanDirectUrl);
+      }
       const directCdn = await resolveCloudStream(cleanUrl, fileExt, quality, isAudio);
       return res.redirect(302, directCdn);
     } catch (cloudErr) {

@@ -16,7 +16,7 @@ function extractYouTubeId(url) {
   return null;
 }
 
-// Background server-side resolver for Vercel Serverless & cloud hosting
+// Background server-side resolver for Vercel Serverless & cloud hosting (YouTube)
 async function resolveCloudStream(url, format, quality, isAudio) {
   let f = isAudio ? 'mp3' : (quality || '1080');
   if (['320', '256', '192', '128'].includes(quality)) f = 'mp3';
@@ -65,7 +65,7 @@ export default async function handler(req, res) {
   }
 
   const params = req.method === 'POST' ? req.body : req.query;
-  const { url, quality = '1080', format = 'mp4', audioOnly = false, title } = params || {};
+  const { url, quality = '1080', format = 'mp4', audioOnly = false, title, directUrl } = params || {};
 
   if (!url || typeof url !== 'string' || !url.trim()) {
     return res.status(400).json({ error: 'Please provide a valid URL' });
@@ -81,8 +81,8 @@ export default async function handler(req, res) {
 
   const isVercel = process.env.VERCEL === '1' || process.env.NOW_REGION != null;
 
-  // 1. In pure Vercel Serverless environment, try high-speed direct cloud resolver
-  if (isVercel) {
+  // 1. In pure Vercel Serverless environment, if YouTube, try high-speed direct cloud resolver
+  if (isVercel && videoId) {
     try {
       const cloudStream = await resolveCloudStream(cleanUrl, fileExt, quality, isAudio);
       if (cloudStream && cloudStream.downloadUrl) {
@@ -98,8 +98,9 @@ export default async function handler(req, res) {
     }
   }
 
-  // 2. Primary / Local stream endpoint: H.264 (AVC) + AAC + faststart seeking
-  const streamDownloadUrl = `/api/stream?url=${encodeURIComponent(cleanUrl)}&quality=${encodeURIComponent(quality)}&format=${encodeURIComponent(fileExt)}&audioOnly=${isAudio}&title=${encodeURIComponent(cleanTitle)}`;
+  // 2. Primary stream endpoint: faststart seeking + universal H.264/AAC MP4 & MP3
+  const directParam = directUrl ? `&directUrl=${encodeURIComponent(directUrl)}` : '';
+  const streamDownloadUrl = `/api/stream?url=${encodeURIComponent(cleanUrl)}&quality=${encodeURIComponent(quality)}&format=${encodeURIComponent(fileExt)}&audioOnly=${isAudio}&title=${encodeURIComponent(cleanTitle)}${directParam}`;
 
   return res.status(200).json({
     status: 'success',
