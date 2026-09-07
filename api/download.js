@@ -79,11 +79,13 @@ export default async function handler(req, res) {
   const cleanTitle = (title || `asi_tube_${videoId || Date.now()}`).replace(/[^a-zA-Z0-9_ -]/g, '').trim().replace(/\s+/g, '_');
   const filename = `${cleanTitle}.${fileExt}`;
 
-  // 1. If direct stream URL is provided (TikTok watermark-free MP4, Facebook/Instagram direct CDN)
-  if (directUrl && directUrl.startsWith('http')) {
+  // 1. If direct stream URL is provided (TikTok watermark-free 1080p MP4, Facebook/Instagram direct CDN)
+  if (directUrl && directUrl.startsWith('http') && !videoId) {
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(directUrl)}&filename=${encodeURIComponent(filename)}`;
     return res.status(200).json({
       status: 'success',
-      downloadUrl: directUrl,
+      downloadUrl: proxyUrl,
+      directUrl: directUrl,
       filename: filename,
       engine: 'direct-cdn'
     });
@@ -109,7 +111,7 @@ export default async function handler(req, res) {
   }
 
   // 3. Primary stream endpoint: faststart seeking + universal H.264/AAC MP4 & MP3
-  const directParam = directUrl ? `&directUrl=${encodeURIComponent(directUrl)}` : '';
+  const directParam = (directUrl && !videoId) ? `&directUrl=${encodeURIComponent(directUrl)}` : '';
   const streamDownloadUrl = `/api/stream?url=${encodeURIComponent(cleanUrl)}&quality=${encodeURIComponent(quality)}&format=${encodeURIComponent(fileExt)}&audioOnly=${isAudio}&title=${encodeURIComponent(cleanTitle)}${directParam}`;
 
   return res.status(200).json({

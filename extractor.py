@@ -24,7 +24,7 @@ def extract_tiktok(url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
     }
-    api_url = f'https://www.tikwm.com/api/?url={urllib.parse.quote(url)}'
+    api_url = f'https://www.tikwm.com/api/?url={urllib.parse.quote(url)}&hd=1'
     req = urllib.request.Request(api_url, headers=headers)
     with urllib.request.urlopen(req, timeout=15) as resp:
         raw = resp.read().decode('utf-8', errors='ignore')
@@ -43,23 +43,28 @@ def extract_tiktok(url):
     music_url = d.get('music') or ''
 
     video_streams = []
-    # Maximum quality without watermark (Full HD if available, otherwise HD play)
-    if d.get('hdplay'):
+    # Maximum quality without watermark: Lossless 1080p Full HD if available
+    raw_hd = d.get('hdplay')
+    if raw_hd:
+        hd_url = raw_hd if raw_hd.startswith('http') else f"https://www.tikwm.com{raw_hd}"
         video_streams.append({
             'quality': '1080',
-            'resolution': 'Maximum Quality - No Watermark (Full HD MP4)',
+            'resolution': 'Full HD 1080p - Original Lossless (No Watermark)',
             'format': 'mp4',
             'fps': 60,
-            'url': d['hdplay'],
+            'url': hd_url,
             'filesize': d.get('hd_size') or d.get('size')
         })
-    if d.get('play'):
+
+    raw_sd = d.get('play')
+    if raw_sd:
+        sd_url = raw_sd if raw_sd.startswith('http') else f"https://www.tikwm.com{raw_sd}"
         video_streams.append({
             'quality': '720',
-            'resolution': 'HD Quality - No Watermark (MP4)',
+            'resolution': 'HD 720p - High Speed (No Watermark)',
             'format': 'mp4',
             'fps': 30,
-            'url': d['play'],
+            'url': sd_url,
             'filesize': d.get('size')
         })
 
@@ -88,7 +93,8 @@ def extract_ytdlp(url):
         'geo_bypass': True,
         'nocheckcertificate': True,
         'js_runtimes': {'node': {}},
-        'remote_components': ['ejs:github']
+        'remote_components': ['ejs:github'],
+        'extractor_args': {'youtube': {'player_client': ['ios', 'android', 'web']}}
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -131,73 +137,80 @@ def extract_ytdlp(url):
 
         # 1. Platform-Specific Formats handling
         if platform == 'facebook':
-            # Facebook provides 'hd' and 'sd' formats
+            # Modern Facebook: sort all formats by height and bitrate descending for true HD
             fb_formats = [f for f in formats_list if f.get('url')]
-            hd_format = next((f for f in fb_formats if f.get('format_id') == 'hd'), None)
-            sd_format = next((f for f in fb_formats if f.get('format_id') == 'sd'), None)
+            fb_formats.sort(
+                key=lambda x: (
+                    x.get('height') or (1080 if x.get('format_id') == 'hd' else (480 if x.get('format_id') == 'sd' else 0)),
+                    1 if (x.get('ext') == 'mp4' or 'avc' in (x.get('vcodec') or '')) else 0,
+                    x.get('tbr') or x.get('vbr') or 0,
+                    x.get('filesize') or x.get('filesize_approx') or 0
+                ),
+                reverse=True
+            )
 
-            if hd_format:
-                video_streams.append({
-                    'quality': '1080',
-                    'resolution': 'HD Quality (1080p / 720p Full HD MP4)',
-                    'format': 'mp4',
-                    'fps': hd_format.get('fps') or 30,
-                    'url': hd_format.get('url'),
-                    'filesize': hd_format.get('filesize') or hd_format.get('filesize_approx')
-                })
-            if sd_format:
-                video_streams.append({
-                    'quality': '480',
-                    'resolution': 'SD Quality (Standard Definition 480p MP4)',
-                    'format': 'mp4',
-                    'fps': sd_format.get('fps') or 30,
-                    'url': sd_format.get('url'),
-                    'filesize': sd_format.get('filesize') or sd_format.get('filesize_approx')
-                })
-            
-            # If no hd/sd found, grab any valid mp4 stream
-            if not video_streams and fb_formats:
-                best_fb = fb_formats[-1]
-                video_streams.append({
-                    'quality': '1080',
-                    'resolution': 'HD Quality (High Definition MP4)',
-                    'format': 'mp4',
-                    'fps': 30,
-                    'url': best_fb.get('url'),
-                    'filesize': best_fb.get('filesize')
-                })
+            seen_heights = set()
+            for f in fb_formats:
+                h = f.get('height') or (1080 if f.get('format_id') == 'hd' else (480 if f.get('format_id') == 'sd' else 720))
+                if h not in seen_heights and f.get('url'):
+                    seen_heights.add(h)
+                    quality_str = '1080' if h >= 1080 else ('720' if h >= 720 else str(h))
+                    res_label = f"Full HD ({h}p MP4)" if h >= 1080 else (f"HD ({h}p MP4)" if h >= 720 else f"SD ({h}p MP4)")
+                    video_streams.append({
+                        'quality': quality_str,
+                        'resolution': res_label,
+                        'format': 'mp4',
+                        'fps': f.get('fps') or 30,
+                        'url': f.get('url'),
+                        'filesize': f.get('filesize') or f.get('filesize_approx')
+                    })
 
         elif platform == 'instagram':
-            # Instagram provides progressive MP4 streams
-            ig_formats = [f for f in formats_list if f.get('url') and (f.get('ext') == 'mp4' or 'mp4' in (f.get('format_note') or ''))]
+            # Instagram provides progressive MP4 streams. Sort by height & bitrate descending
+            ig_formats = [
+                f for f in formats_list
+                if f.get('url') and (f.get('ext') == 'mp4' or 'mp4' in (f.get('format_note') or ''))
+            ]
             if not ig_formats:
                 ig_formats = [f for f in formats_list if f.get('url')]
             
+            ig_formats.sort(
+                key=lambda x: (
+                    x.get('height') or 0,
+                    x.get('tbr') or x.get('vbr') or 0,
+                    x.get('filesize') or x.get('filesize_approx') or 0
+                ),
+                reverse=True
+            )
+
             if ig_formats:
-                # The highest quality is usually the last or highest bitrate
-                best_ig = ig_formats[-1]
+                best_ig = ig_formats[0]
+                h = best_ig.get('height') or 1080
                 video_streams.append({
-                    'quality': '1080',
-                    'resolution': 'Maximum Quality (Original HD MP4)',
+                    'quality': '1080' if h >= 1080 else str(h),
+                    'resolution': f'Original Quality (Full HD {h}p MP4)',
                     'format': 'mp4',
                     'fps': best_ig.get('fps') or 30,
                     'url': best_ig.get('url'),
                     'filesize': best_ig.get('filesize') or best_ig.get('filesize_approx')
                 })
                 if len(ig_formats) > 1:
-                    lower_ig = ig_formats[0]
-                    video_streams.append({
-                        'quality': '720',
-                        'resolution': 'Standard Quality (HD 720p MP4)',
-                        'format': 'mp4',
-                        'fps': lower_ig.get('fps') or 30,
-                        'url': lower_ig.get('url'),
-                        'filesize': lower_ig.get('filesize')
-                    })
+                    lower_ig = ig_formats[-1]
+                    lh = lower_ig.get('height') or 720
+                    if lh != h:
+                        video_streams.append({
+                            'quality': '720' if lh >= 720 else str(lh),
+                            'resolution': f'Standard Quality (HD {lh}p MP4)',
+                            'format': 'mp4',
+                            'fps': lower_ig.get('fps') or 30,
+                            'url': lower_ig.get('url'),
+                            'filesize': lower_ig.get('filesize')
+                        })
 
         # 2. General / YouTube height-based formats
         if not video_streams:
             seen_res = set()
+            # Prioritize direct HTTP/HTTPS DASH and progressive streams over HLS m3u8 playlists
             valid_video = [
                 f for f in formats_list
                 if f.get('vcodec') != 'none' and f.get('height') and f.get('height') >= 144
@@ -205,6 +218,8 @@ def extract_ytdlp(url):
             valid_video.sort(
                 key=lambda x: (
                     x.get('height') or 0,
+                    # Favor direct HTTPS over m3u8 playlists
+                    1 if not (x.get('protocol') or '').startswith('m3u8') else 0,
                     1 if (x.get('ext') == 'mp4' or 'avc' in (x.get('vcodec') or '')) else 0,
                     x.get('tbr') or x.get('vbr') or 0,
                     x.get('filesize') or x.get('filesize_approx') or 0
@@ -232,7 +247,7 @@ def extract_ytdlp(url):
 
             # If still empty (e.g. progressive file with height=None)
             if not video_streams and formats_list:
-                for f in reversed(formats_list):
+                for f in sorted(formats_list, key=lambda x: x.get('tbr') or 0, reverse=True):
                     if f.get('url'):
                         video_streams.append({
                             'quality': '1080',

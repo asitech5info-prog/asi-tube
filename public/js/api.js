@@ -25,14 +25,17 @@ const API = {
     const cleanTitle = (title || 'video').replace(/[^a-zA-Z0-9_ -]/g, '').trim().replace(/\s+/g, '_');
     const isAudio = audioOnly === true || audioOnly === 'true' || ['mp3', 'm4a', 'wav', 'flac'].includes(format);
     const fileExt = isAudio ? (format === 'mp3' ? 'mp3' : (format || 'mp3')) : (format || 'mp4');
-    const directParam = directUrl ? `&directUrl=${encodeURIComponent(directUrl)}` : '';
+    const filename = `${cleanTitle}.${fileExt}`;
+    const isYouTube = url && (url.includes('youtube.com') || url.includes('youtu.be'));
+    const cleanDirect = isYouTube ? '' : (directUrl || '');
+    const directParam = cleanDirect ? `&directUrl=${encodeURIComponent(cleanDirect)}` : '';
     const onSiteStreamUrl = `/api/stream?url=${encodeURIComponent(url)}&quality=${encodeURIComponent(quality || '1080')}&format=${encodeURIComponent(fileExt)}&audioOnly=${isAudio}&title=${encodeURIComponent(cleanTitle)}${directParam}`;
 
     try {
       const res = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, quality, format, audioOnly, title, directUrl })
+        body: JSON.stringify({ url, quality, format, audioOnly, title, directUrl: cleanDirect })
       });
       if (res.ok) {
         const data = await res.json();

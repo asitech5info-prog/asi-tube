@@ -102,7 +102,7 @@ function extractWithPython(url) {
 
 async function extractTikTokNative(url) {
   try {
-    const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, {
+    const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
       }
@@ -116,25 +116,27 @@ async function extractTikTokNative(url) {
     const videoStreams = [];
 
     if (d.hdplay) {
+      const hdUrl = d.hdplay.startsWith('http') ? d.hdplay : `https://www.tikwm.com${d.hdplay}`;
       videoStreams.push({
         quality: '1080',
-        resolution: 'Full HD (1080p) - No Watermark',
+        resolution: 'Full HD (1080p) - Lossless No-WM',
         format: 'mp4',
         fps: 60,
         estimatedSize: d.hd_size ? formatBytes(d.hd_size) : calculateEstimatedSize(duration, '1080'),
-        directUrl: d.hdplay,
+        directUrl: hdUrl,
         note: 'Full HD No-WM'
       });
     }
 
     if (d.play) {
+      const playUrl = d.play.startsWith('http') ? d.play : `https://www.tikwm.com${d.play}`;
       videoStreams.push({
         quality: '720',
         resolution: 'HD (720p) - No Watermark',
         format: 'mp4',
         fps: 30,
         estimatedSize: d.size ? formatBytes(d.size) : calculateEstimatedSize(duration, '720'),
-        directUrl: d.play,
+        directUrl: playUrl,
         note: 'HD No-WM'
       });
     }
@@ -171,7 +173,7 @@ async function extractTikTokNative(url) {
       thumbnail: d.cover || d.origin_cover || '',
       formats: {
         video: videoStreams.length > 0 ? videoStreams : [
-          { quality: '720', resolution: 'HD (720p)', format: 'mp4', fps: 30, estimatedSize: '~ MB', directUrl: d.play, note: 'HD MP4' }
+          { quality: '720', resolution: 'HD (720p)', format: 'mp4', fps: 30, estimatedSize: '~ MB', directUrl: d.play ? (d.play.startsWith('http') ? d.play : `https://www.tikwm.com${d.play}`) : null, note: 'HD MP4' }
         ],
         audio: audioFormats,
         thumbnails: thumbnails
@@ -188,7 +190,7 @@ async function extractFacebookNative(url) {
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
       }
     });

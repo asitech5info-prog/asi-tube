@@ -48,7 +48,10 @@ function cleanupOldCache() {
 }
 
 // Periodically run cleanup every 30 minutes
-setInterval(cleanupOldCache, 30 * 60 * 1000);
+const cleanupInterval = setInterval(cleanupOldCache, 30 * 60 * 1000);
+if (cleanupInterval && cleanupInterval.unref) {
+  cleanupInterval.unref();
+}
 
 function extractYouTubeId(url) {
   if (!url) return null;
@@ -179,6 +182,102 @@ function runFfmpeg(bin, args) {
     });
     proc.on('error', reject);
   });
+}
+
+// Guarantee standard H.264 (AVC) + AAC with +faststart moov atom
+async function ensureUniversalMp4(filePath) {
+  const bin = ffmpegPath && fs.existsSync(ffmpegPath) ? ffmpegPath : 'ffmpeg';
+  const probe = await new Promise((resolve) => {
+    const proc = spawn(bin, ['-i', filePath]);
+    let log = '';
+    proc.stderr.on('data', d => { log += d.toString(); });
+    proc.on('close', () => resolve(log));
+    proc.on('error', () => resolve(''));
+  });
+
+  const isMpegTs = /Input #0,\s*mpegts/i.test(probe);
+  const hasH264 = /Video:\s*(?:h264|avc1)/i.test(probe);
+  const hasAAC = /Audio:\s*(?:aac|mp4a)/i.test(probe);
+
+  // If container is mpegts OR not H264 OR not AAC, transcode to 100% compliant H.264/AAC MP4 with +faststart
+  if (isMpegTs || !hasH264 || !hasAAC) {
+    const transcodeTmp = `${filePath}.transcode.mp4`;
+    try {
+      await runFfmpeg(bin, [
+        '-y',
+        '-i', filePath,
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-crf', '20',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-movflags', '+faststart',
+        transcodeTmp
+      ]);
+      if (fs.existsSync(transcodeTmp) && fs.statSync(transcodeTmp).size > 1024) {
+        fs.unlinkSync(filePath);
+        fs.renameSync(transcodeTmp, filePath);
+      }
+    } catch (err) {
+      console.warn('Transcode to universal H.264/AAC failed, keeping original:', err.message);
+      if (fs.existsSync(transcodeTmp)) try { fs.unlinkSync(transcodeTmp); } catch (_) { }
+    }
+    return;
+  }
+
+  // If already H.264 and AAC and MP4 container, ensure +faststart moov atom is at the front
+  const faststartTmp = `${filePath}.faststart.mp4`;
+  try {
+    await runFfmpeg(bin, [
+      '-y',
+      '-i', filePath,
+      '-c', 'copy',
+      '-movflags', '+faststart',
+      faststartTmp
+    ]);
+    if (fs.existsSync(faststartTmp) && fs.statSync(faststartTmp).size > 1024) {
+      fs.unlinkSync(filePath);
+      fs.renameSync(faststartTmp, filePath);
+    }
+  } catch (e) {
+    if (fs.existsSync(faststartTmp)) try { fs.unlinkSync(faststartTmp); } catch (_) { }
+  }
+}
+
+// Guarantee standard MP3 with Xing/ID3v2 seek frames
+async function ensureUniversalMp3(filePath) {
+  const bin = ffmpegPath && fs.existsSync(ffmpegPath) ? ffmpegPath : 'ffmpeg';
+  const probe = await new Promise((resolve) => {
+    const proc = spawn(bin, ['-i', filePath]);
+    let log = '';
+    proc.stderr.on('data', d => { log += d.toString(); });
+    proc.on('close', () => resolve(log));
+    proc.on('error', () => resolve(''));
+  });
+
+  const isMp3 = /Audio:\s*mp3/i.test(probe);
+  if (!isMp3) {
+    const mp3Tmp = `${filePath}.fix.mp3`;
+    try {
+      await runFfmpeg(bin, [
+        '-y',
+        '-i', filePath,
+        '-vn',
+        '-c:a', 'libmp3lame',
+        '-b:a', '320k',
+        '-id3v2_version', '3',
+        '-write_xing', '1',
+        mp3Tmp
+      ]);
+      if (fs.existsSync(mp3Tmp) && fs.statSync(mp3Tmp).size > 1024) {
+        fs.unlinkSync(filePath);
+        fs.renameSync(mp3Tmp, filePath);
+      }
+    } catch (err) {
+      console.warn('Audio transcode to MP3 failed, keeping original:', err.message);
+      if (fs.existsSync(mp3Tmp)) try { fs.unlinkSync(mp3Tmp); } catch (_) { }
+    }
+  }
 }
 
 // Direct stream processor using FFmpeg
@@ -344,8 +443,10 @@ export default async function handler(req, res) {
       '--no-warnings',
       '--js-runtimes', 'node',
       '--remote-components', 'ejs:github',
+      '--extractor-args', 'youtube:player_client=ios,android,web',
       '--geo-bypass',
-      '-N', '5'
+      '-N', '8',
+      '--concurrent-fragments', '8'
     ];
 
     if (ffmpegPath && fs.existsSync(ffmpegPath)) {
@@ -364,16 +465,20 @@ export default async function handler(req, res) {
 
       // Facebook, WhatsApp & mobile video standard:
       // Stream-copy or transcode to H.264 (AVC) + AAC MP4 with faststart seeking
+      // Prioritize HTTPS DASH / progressive streams over HLS m3u8 fragments:
       args.push('-S', `res:${maxH},vcodec:h264,acodec:m4a,fps,br`);
       args.push(
         '-f',
-        `bestvideo[height<=${maxH}][vcodec^=avc1]+bestaudio[ext=m4a]/` +
-        `bestvideo[height<=${maxH}][vcodec^=avc]+bestaudio[acodec^=mp4a]/` +
-        `bestvideo[height<=${maxH}]+bestaudio/best[height<=${maxH}]/best`
+        `bv*[height<=${maxH}][protocol^=http][vcodec^=avc]+ba[ext=m4a][protocol^=http]/` +
+        `bv*[height<=${maxH}][protocol^=http]+ba[protocol^=http]/` +
+        `bv*[height<=${maxH}][vcodec^=avc]+ba[ext=m4a]/` +
+        `bv*[height<=${maxH}]+ba/` +
+        `b[height<=${maxH}][protocol^=http]/b`
       );
       args.push('--merge-output-format', 'mp4');
       args.push('--remux-video', 'mp4');
-      args.push('--postprocessor-args', 'ffmpeg:-movflags +faststart');
+      args.push('--postprocessor-args', 'Merger:-c copy -movflags +faststart');
+      args.push('--postprocessor-args', 'VideoRemuxer:-c copy -movflags +faststart');
       args.push('-o', tempPartPath);
     }
 
@@ -393,7 +498,7 @@ export default async function handler(req, res) {
         reject(err);
       });
 
-      proc.on('close', (code) => {
+      proc.on('close', async (code) => {
         if (code === 0) {
           let finalGeneratedPath = tempPartPath;
           if (!fs.existsSync(finalGeneratedPath)) {
@@ -417,6 +522,12 @@ export default async function handler(req, res) {
             try {
               if (finalGeneratedPath !== targetFilePath) {
                 fs.renameSync(finalGeneratedPath, targetFilePath);
+              }
+              // Post-process to guarantee universal compatibility and faststart seeking
+              if (isAudio) {
+                await ensureUniversalMp3(targetFilePath);
+              } else if (fileExt === 'mp4') {
+                await ensureUniversalMp4(targetFilePath);
               }
               return resolve(targetFilePath);
             } catch (renameErr) {
@@ -448,9 +559,6 @@ export default async function handler(req, res) {
 
     // Fallback for cloud/serverless environment (Vercel) without local yt-dlp
     try {
-      if (cleanDirectUrl) {
-        return res.redirect(302, cleanDirectUrl);
-      }
       const directCdn = await resolveCloudStream(cleanUrl, fileExt, quality, isAudio);
       return res.redirect(302, directCdn);
     } catch (cloudErr) {

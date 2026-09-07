@@ -5,3 +5,5 @@ node_modules/
 .DS_Store
 *.log
 temp/
+__pycache__/
+*.pyc
