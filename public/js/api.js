@@ -67,38 +67,35 @@ const API = {
 
   // Client-side fallback if network error
   clientFallbackInfo(rawUrl) {
-    let videoId = 'dQw4w9WgXcQ';
-    const match = rawUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
-    if (match && match[1]) {
-      videoId = match[1];
+    const match = (rawUrl || '').match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
+    if (!match || !match[1]) {
+      throw new Error('Could not retrieve video details from this link. Please verify the URL is public and valid.');
     }
-    
+    const videoId = match[1];
+
     return {
       id: videoId,
       url: rawUrl,
-      title: 'YouTube Ultra HD Video',
-      author: 'YouTube Media',
+      title: 'YouTube Video',
+      author: 'YouTube Creator',
       authorUrl: '',
-      duration: 210,
-      durationFormatted: '3:30',
-      views: 1250000,
-      viewsFormatted: '1.2M views',
+      duration: 180,
+      durationFormatted: 'HD Video',
+      views: 0,
+      viewsFormatted: 'Trending',
       thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-      description: 'Stream extraction ready',
+      description: '',
       publishedAt: 'Instant',
       formats: {
         video: [
-          { quality: '2160', resolution: '4K Ultra HD (2160p)', format: 'mp4', fps: 60, estimatedSize: '240 MB', directUrl: null, note: 'Ultra Crisp 4K' },
-          { quality: '1080', resolution: 'Full HD (1080p60)', format: 'mp4', fps: 60, estimatedSize: '85 MB', directUrl: null, note: 'Best 1080p 60fps' },
-          { quality: '720', resolution: 'HD (720p)', format: 'mp4', fps: 30, estimatedSize: '42 MB', directUrl: null, note: 'Standard HD' },
-          { quality: '480', resolution: 'SD (480p)', format: 'mp4', fps: 30, estimatedSize: '22 MB', directUrl: null, note: 'Standard Definition' },
-          { quality: '360', resolution: 'Mobile (360p)', format: 'mp4', fps: 30, estimatedSize: '14 MB', directUrl: null, note: 'Fast & Lightweight' }
+          { quality: '1080', resolution: 'Full HD (1080p60)', format: 'mp4', fps: 60, estimatedSize: 'Full HD', directUrl: null, note: 'Best 1080p' },
+          { quality: '720', resolution: 'HD (720p)', format: 'mp4', fps: 30, estimatedSize: 'HD', directUrl: null, note: 'Standard HD' },
+          { quality: '480', resolution: 'SD (480p)', format: 'mp4', fps: 30, estimatedSize: 'SD', directUrl: null, note: 'Standard Definition' },
+          { quality: '360', resolution: 'Mobile (360p)', format: 'mp4', fps: 30, estimatedSize: 'Mobile', directUrl: null, note: 'Lightweight' }
         ],
         audio: [
-          { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '7.8 MB', directUrl: null, note: 'Studio Master Quality' },
-          { quality: '256', bitrate: '256 kbps MP3', format: 'mp3', estimatedSize: '6.2 MB', directUrl: null, note: 'High Definition Audio' },
-          { quality: '128', bitrate: '128 kbps MP3', format: 'mp3', estimatedSize: '3.1 MB', directUrl: null, note: 'Compact / Mobile' },
-          { quality: 'm4a', bitrate: 'Original AAC / M4A', format: 'm4a', estimatedSize: '3.8 MB', directUrl: null, note: 'Native Stream' }
+          { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Studio Master Quality' },
+          { quality: '128', bitrate: '128 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Standard MP3' }
         ],
         thumbnails: [
           { resolution: '1280x720', quality: 'Ultra HD', url: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` },

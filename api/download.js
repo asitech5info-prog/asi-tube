@@ -34,7 +34,7 @@ async function resolveCloudStream(url, format, quality, isAudio) {
   if (!data.id) throw new Error('No conversion ID');
 
   const progressUrl = data.progress_url || ('https://loader.to/ajax/progress.php?id=' + data.id);
-  
+
   for (let i = 0; i < 25; i++) {
     await new Promise(r => setTimeout(r, 1200));
     const pRes = await fetch(progressUrl, {
@@ -75,13 +75,23 @@ export default async function handler(req, res) {
   const videoId = extractYouTubeId(cleanUrl);
   const isAudio = audioOnly === true || audioOnly === 'true' || ['mp3', 'm4a', 'wav', 'flac'].includes(format);
   const fileExt = isAudio ? (format === 'mp3' ? 'mp3' : 'm4a') : (format || 'mp4');
-  
+
   const cleanTitle = (title || `asi_tube_${videoId || Date.now()}`).replace(/[^a-zA-Z0-9_ -]/g, '').trim().replace(/\s+/g, '_');
   const filename = `${cleanTitle}.${fileExt}`;
 
+  // 1. If direct stream URL is provided (TikTok watermark-free MP4, Facebook/Instagram direct CDN)
+  if (directUrl && directUrl.startsWith('http')) {
+    return res.status(200).json({
+      status: 'success',
+      downloadUrl: directUrl,
+      filename: filename,
+      engine: 'direct-cdn'
+    });
+  }
+
   const isVercel = process.env.VERCEL === '1' || process.env.NOW_REGION != null;
 
-  // 1. In pure Vercel Serverless environment, if YouTube, try high-speed direct cloud resolver
+  // 2. In pure Vercel Serverless environment, if YouTube, try direct cloud resolver
   if (isVercel && videoId) {
     try {
       const cloudStream = await resolveCloudStream(cleanUrl, fileExt, quality, isAudio);
@@ -98,7 +108,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // 2. Primary stream endpoint: faststart seeking + universal H.264/AAC MP4 & MP3
+  // 3. Primary stream endpoint: faststart seeking + universal H.264/AAC MP4 & MP3
   const directParam = directUrl ? `&directUrl=${encodeURIComponent(directUrl)}` : '';
   const streamDownloadUrl = `/api/stream?url=${encodeURIComponent(cleanUrl)}&quality=${encodeURIComponent(quality)}&format=${encodeURIComponent(fileExt)}&audioOnly=${isAudio}&title=${encodeURIComponent(cleanTitle)}${directParam}`;
 

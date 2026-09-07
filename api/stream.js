@@ -27,7 +27,7 @@ const STORAGE_DIR = fs.existsSync(TEMP_DIR) ? TEMP_DIR : path.join(os.tmpdir(), 
 if (!fs.existsSync(STORAGE_DIR)) {
   try {
     fs.mkdirSync(STORAGE_DIR, { recursive: true });
-  } catch (e) {}
+  } catch (e) { }
 }
 
 // Clean up cached files older than 1 hour to avoid filling disk
@@ -42,9 +42,9 @@ function cleanupOldCache() {
         if (now - stats.mtimeMs > 3600 * 1000) {
           fs.unlinkSync(fp);
         }
-      } catch (e) {}
+      } catch (e) { }
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 // Periodically run cleanup every 30 minutes
@@ -95,7 +95,7 @@ async function resolveCloudStream(url, format, quality, isAudio) {
   if (!data.id) throw new Error('No conversion ID');
 
   const progressUrl = data.progress_url || ('https://loader.to/ajax/progress.php?id=' + data.id);
-  
+
   for (let i = 0; i < 25; i++) {
     await new Promise(r => setTimeout(r, 1200));
     const pRes = await fetch(progressUrl, {
@@ -168,98 +168,87 @@ function serveCompleteFile(req, res, filePath, filename, contentType) {
   }
 }
 
-// Direct stream processor using FFmpeg
-function processDirectStream(directUrl, targetFilePath, isAudio, fileExt, quality) {
-  return new Promise(async (resolve, reject) => {
-    const tempPartPath = `${targetFilePath}.part`;
-    if (fs.existsSync(tempPartPath)) {
-      try { fs.unlinkSync(tempPartPath); } catch (e) {}
-    }
-
-    const bin = ffmpegPath && fs.existsSync(ffmpegPath) ? ffmpegPath : 'ffmpeg';
-    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
-
-    let args = [];
-    if (isAudio) {
-      args = [
-        '-y',
-        '-headers', `User-Agent: ${userAgent}\r\n`,
-        '-i', directUrl,
-        '-vn',
-        '-b:a', quality && ['320', '256', '192', '128'].includes(quality) ? `${quality}k` : '320k',
-        tempPartPath
-      ];
-    } else {
-      // First attempt fast stream-copy with +faststart
-      args = [
-        '-y',
-        '-headers', `User-Agent: ${userAgent}\r\n`,
-        '-i', directUrl,
-        '-c', 'copy',
-        '-movflags', '+faststart',
-        tempPartPath
-      ];
-    }
-
+function runFfmpeg(bin, args) {
+  return new Promise((resolve, reject) => {
     const proc = spawn(bin, args);
     let stderrLog = '';
     proc.stderr.on('data', d => { stderrLog += d.toString(); });
-
-    proc.on('close', async (code) => {
-      if (code === 0 && fs.existsSync(tempPartPath) && fs.statSync(tempPartPath).size > 1024) {
-        try {
-          fs.renameSync(tempPartPath, targetFilePath);
-          return resolve(targetFilePath);
-        } catch (e) {
-          return resolve(tempPartPath);
-        }
-      }
-
-      // If ffmpeg copy failed, fallback to direct fetch and save
-      try {
-        const fetchRes = await fetch(directUrl, {
-          headers: { 'User-Agent': userAgent }
-        });
-        if (fetchRes.ok) {
-          const fileStream = fs.createWriteStream(tempPartPath);
-          const reader = fetchRes.body.getReader();
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            fileStream.write(Buffer.from(value));
-          }
-          fileStream.end();
-          await new Promise(r => fileStream.on('finish', r));
-          fs.renameSync(tempPartPath, targetFilePath);
-          return resolve(targetFilePath);
-        }
-      } catch (fetchErr) {
-        console.warn('Direct fetch fallback failed:', fetchErr.message);
-      }
-
-      reject(new Error(`Direct stream processing failed: ${stderrLog.slice(-200)}`));
+    proc.on('close', code => {
+      if (code === 0) resolve();
+      else reject(new Error(`FFmpeg exited with code ${code}: ${stderrLog.slice(-300)}`));
     });
-
-    proc.on('error', async (err) => {
-      // If ffmpeg not found, direct fetch
-      try {
-        const fetchRes = await fetch(directUrl, { headers: { 'User-Agent': userAgent } });
-        if (fetchRes.ok) {
-          const fileStream = fs.createWriteStream(targetFilePath);
-          const reader = fetchRes.body.getReader();
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            fileStream.write(Buffer.from(value));
-          }
-          fileStream.end();
-          await new Promise(r => fileStream.on('finish', r));
-          return resolve(targetFilePath);
-        }
-      } catch (e) {}
-      reject(err);
-    });
+    proc.on('error', reject);
   });
+}
+
+// Direct stream processor using FFmpeg
+async function processDirectStream(directUrl, targetFilePath, isAudio, fileExt, quality) {
+  const tempPartPath = `${targetFilePath}.tmp.${fileExt}`;
+  if (fs.existsSync(tempPartPath)) {
+    try { fs.unlinkSync(tempPartPath); } catch (e) { }
+  }
+
+  const bin = ffmpegPath && fs.existsSync(ffmpegPath) ? ffmpegPath : 'ffmpeg';
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+
+  if (isAudio) {
+    const audioBitrate = quality && ['320', '256', '192', '128'].includes(quality) ? `${quality}k` : '320k';
+    const args = [
+      '-y',
+      '-headers', `User-Agent: ${userAgent}\r\n`,
+      '-i', directUrl,
+      '-vn',
+      '-c:a', 'libmp3lame',
+      '-b:a', audioBitrate,
+      '-id3v2_version', '3',
+      '-write_xing', '1',
+      '-f', 'mp3',
+      tempPartPath
+    ];
+    await runFfmpeg(bin, args);
+  } else {
+    // 1. First try fast stream-copy with +faststart
+    try {
+      const copyArgs = [
+        '-y',
+        '-headers', `User-Agent: ${userAgent}\r\n`,
+        '-i', directUrl,
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-movflags', '+faststart',
+        '-f', 'mp4',
+        tempPartPath
+      ];
+      await runFfmpeg(bin, copyArgs);
+    } catch (copyErr) {
+      console.warn('Stream-copy failed, falling back to H.264 transcode:', copyErr.message);
+      if (fs.existsSync(tempPartPath)) {
+        try { fs.unlinkSync(tempPartPath); } catch (e) { }
+      }
+      // 2. Transcode to universal H.264 (AVC) + AAC with +faststart
+      const transcodeArgs = [
+        '-y',
+        '-headers', `User-Agent: ${userAgent}\r\n`,
+        '-i', directUrl,
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-crf', '22',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-movflags', '+faststart',
+        '-f', 'mp4',
+        tempPartPath
+      ];
+      await runFfmpeg(bin, transcodeArgs);
+    }
+  }
+
+  if (fs.existsSync(tempPartPath) && fs.statSync(tempPartPath).size > 1024) {
+    fs.renameSync(tempPartPath, targetFilePath);
+    return targetFilePath;
+  }
+  throw new Error('Processed direct stream file was empty or invalid.');
 }
 
 export default async function handler(req, res) {
@@ -323,7 +312,7 @@ export default async function handler(req, res) {
       } else {
         fs.unlinkSync(targetFilePath);
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   // 2. If a download task for this exact file is currently in progress, wait for it
@@ -347,7 +336,7 @@ export default async function handler(req, res) {
 
     const tempPartPath = `${targetFilePath}.part`;
     if (fs.existsSync(tempPartPath)) {
-      try { fs.unlinkSync(tempPartPath); } catch (e) {}
+      try { fs.unlinkSync(tempPartPath); } catch (e) { }
     }
 
     const args = [
@@ -368,13 +357,14 @@ export default async function handler(req, res) {
       args.push('--audio-format', fileExt === 'mp3' ? 'mp3' : fileExt);
       const audioBitrate = quality && ['320', '256', '192', '128'].includes(quality) ? `${quality}k` : '320k';
       args.push('--audio-quality', audioBitrate);
+      args.push('--postprocessor-args', 'ffmpeg:-id3v2_version 3 -write_xing 1');
       args.push('-o', tempPartPath);
     } else {
       const maxH = parseInt(quality, 10) || 1080;
 
       // Facebook, WhatsApp & mobile video standard:
       // Stream-copy or transcode to H.264 (AVC) + AAC MP4 with faststart seeking
-      args.push('-S', `res:${maxH},vcodec:h264,fps,br`);
+      args.push('-S', `res:${maxH},vcodec:h264,acodec:m4a,fps,br`);
       args.push(
         '-f',
         `bestvideo[height<=${maxH}][vcodec^=avc1]+bestaudio[ext=m4a]/` +

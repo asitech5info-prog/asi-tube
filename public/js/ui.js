@@ -6,7 +6,7 @@ const UI = {
     const container = document.getElementById('toastContainer') || this.createToastContainer();
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    
+
     let icon = '⚡';
     if (type === 'success') icon = '✅';
     if (type === 'error') icon = '❌';
@@ -43,7 +43,7 @@ const UI = {
     const descContainer = document.getElementById('videoDescContainer');
     const descText = document.getElementById('resultDescription');
     const toggleDescBtn = document.getElementById('toggleDescBtn');
-    
+
     if (!resultSection) return;
 
     thumbImg.src = data.thumbnail || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80';
@@ -76,7 +76,7 @@ const UI = {
       if (desc) {
         descText.textContent = desc;
         descContainer.classList.remove('hidden');
-        
+
         // Collapse long descriptions
         if (desc.length > 160 || desc.includes('\n')) {
           descText.classList.add('collapsed');
@@ -116,7 +116,7 @@ const UI = {
 
     formats.forEach(fmt => {
       const tr = document.createElement('tr');
-      
+
       let badgeClass = 'quality-badge';
       if (fmt.quality === '2160' || fmt.quality === '1440') badgeClass += ' badge-4k';
       else if (fmt.quality === '1080' || fmt.quality === '720') badgeClass += ' badge-hd';
@@ -235,7 +235,7 @@ const UI = {
         clearInterval(interval);
         progressBar.style.width = '100%';
         modalStatus.textContent = '⚡ File ready! Direct download in progress...';
-        
+
         let actionButtons = `
           <a class="btn-convert" style="width: 100%; justify-content: center; text-decoration: none; margin-top: 16px; font-size: 1.05rem; padding: 14px 20px; border-radius: 10px;" href="${downloadUrl}" download="${filename || 'video.mp4'}">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
@@ -259,7 +259,7 @@ const UI = {
           document.body.appendChild(a);
           a.click();
           setTimeout(() => a.remove(), 1000);
-        } catch (e) {}
+        } catch (e) { }
       },
       error(msg) {
         clearInterval(interval);

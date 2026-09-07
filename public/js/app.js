@@ -35,7 +35,7 @@ const App = {
       if (savedTheme === 'light') {
         document.documentElement.classList.add('light-mode');
       }
-    } catch (e) {}
+    } catch (e) { }
   },
 
   getCurrentTheme() {
@@ -400,7 +400,7 @@ const App = {
         const currentTheme = this.getCurrentTheme();
         try {
           localStorage.setItem('theme', currentTheme);
-        } catch (e) {}
+        } catch (e) { }
       });
     }
 

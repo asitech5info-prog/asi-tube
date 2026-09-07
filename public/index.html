@@ -1,27 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>All-in-One Video Downloader - YouTube, Facebook, Instagram Reels & TikTok - ASI Tube</title>
-  <meta name="description" content="Download YouTube videos, Facebook videos, Instagram Reels, and TikTok videos without watermark in HD / 1080p MP4 or 320kbps MP3. Copy title and description with one click. Fast, free, and watermark-free." />
-  <meta name="keywords" content="youtube downloader, tiktok video without watermark, instagram reel downloader, facebook video download, copy video title, copy description, asi tube, 1080p mp4, 320kbps mp3" />
+  <meta name="description"
+    content="Download YouTube videos, Facebook videos, Instagram Reels, and TikTok videos without watermark in HD / 1080p MP4 or 320kbps MP3. Copy title and description with one click. Fast, free, and watermark-free." />
+  <meta name="keywords"
+    content="youtube downloader, tiktok video without watermark, instagram reel downloader, facebook video download, copy video title, copy description, asi tube, 1080p mp4, 320kbps mp3" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
 
   <script>
     // Initialize theme before render to prevent flash
-    (function() {
+    (function () {
       try {
         var t = localStorage.getItem('theme');
         if (t === 'light' || (!t && window.matchMedia && !window.matchMedia('(prefers-color-scheme: dark)').matches)) {
           document.documentElement.classList.add('light-mode');
         }
-      } catch (e) {}
+      } catch (e) { }
     })();
   </script>
 </head>
@@ -67,7 +71,9 @@
         <div class="hero-content">
           <h1>All-in-One Video Downloader</h1>
           <p class="hero-subtitle">
-            Download videos & reels from <strong>YouTube</strong>, <strong>Facebook</strong>, <strong>Instagram</strong>, and <strong>TikTok</strong> (No Watermark) at maximum quality. Copy titles & descriptions in 1-click.
+            Download videos & reels from <strong>YouTube</strong>, <strong>Facebook</strong>,
+            <strong>Instagram</strong>, and <strong>TikTok</strong> (No Watermark) at maximum quality. Copy titles &
+            descriptions in 1-click.
           </p>
 
           <!-- Platform Chips -->
@@ -82,15 +88,12 @@
           <div class="downloader-card">
             <div class="input-group">
               <div class="input-wrapper">
-                <input
-                  type="text"
-                  id="media-url"
-                  placeholder="Paste YouTube, Facebook, Instagram Reel, or TikTok link here..."
-                  aria-label="Video URL"
-                  autocomplete="off"
-                />
+                <input type="text" id="media-url"
+                  placeholder="Paste YouTube, Facebook, Instagram Reel, or TikTok link here..." aria-label="Video URL"
+                  autocomplete="off" />
                 <button id="clear-btn" class="clear-btn hidden" aria-label="Clear input">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
                   </svg>
@@ -99,14 +102,16 @@
 
               <button id="download-btn" class="btn-primary">
                 <span class="btn-text">Start</span>
-                <svg class="btn-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <svg class="btn-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="5" y1="12" x2="19" y2="12"></line>
                   <polyline points="12 5 19 12 12 19"></polyline>
                 </svg>
               </button>
             </div>
 
-            <div id="error-message" class="error-message hidden">Please enter a valid video link (YouTube, Facebook, Instagram, or TikTok).</div>
+            <div id="error-message" class="error-message hidden">Please enter a valid video link (YouTube, Facebook,
+              Instagram, or TikTok).</div>
           </div>
 
           <!-- Result Card Area -->
@@ -131,7 +136,8 @@
                     <div class="video-title-wrap">
                       <h2 id="resultTitle" class="video-title">Video Title</h2>
                       <button id="copyTitleBtn" class="btn-copy" type="button" title="Copy Title to Clipboard">
-                        <svg class="copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg class="copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                           <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                         </svg>
@@ -144,15 +150,27 @@
                         <span id="resultPlatform" class="platform-badge badge-youtube">YouTube</span>
                       </div>
                       <div class="meta-item">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                          <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
                         <span id="resultChannel" class="channel-badge">Creator</span>
                       </div>
                       <div class="meta-item">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                          <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
                         <span id="resultViews">0 views</span>
                       </div>
                       <div class="meta-item">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2">
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
                         <span id="resultDuration">0:00</span>
                       </div>
                     </div>
@@ -162,15 +180,19 @@
                       <div class="desc-header">
                         <span class="desc-label">📝 Description</span>
                         <div class="desc-actions">
-                          <button id="copyDescBtn" class="btn-copy btn-copy-sm" type="button" title="Copy Description to Clipboard">
-                            <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                          <button id="copyDescBtn" class="btn-copy btn-copy-sm" type="button"
+                            title="Copy Description to Clipboard">
+                            <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                             </svg>
                             <span class="copy-btn-text">Copy Description</span>
                           </button>
-                          <button id="copyBothBtn" class="btn-copy btn-copy-sm" type="button" title="Copy Both Title & Description">
-                            <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                          <button id="copyBothBtn" class="btn-copy btn-copy-sm" type="button"
+                            title="Copy Both Title & Description">
+                            <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                               <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
                               <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
                             </svg>
@@ -187,15 +209,26 @@
                 <!-- Format Selection Tabs -->
                 <div class="result-format-tabs">
                   <button class="fmt-tab active" data-fmt="video" id="tabVideo">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                      <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                    </svg>
                     <span>Video (MP4)</span>
                   </button>
                   <button class="fmt-tab" data-fmt="audio" id="tabAudio">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 18V5l12-2v13"></path>
+                      <circle cx="6" cy="18" r="3"></circle>
+                      <circle cx="18" cy="16" r="3"></circle>
+                    </svg>
                     <span>Audio (MP3 / M4A)</span>
                   </button>
                   <button class="fmt-tab" data-fmt="thumbnails" id="tabThumbnails">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                      <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
                     <span>Cover Art / HD Thumbnail</span>
                   </button>
                 </div>
@@ -230,9 +263,14 @@
         <h2 class="section-title">Free Multi-Platform Video Downloader</h2>
         <div class="about-content">
           <p>
-            ASI Tube is your all-in-one media suite to download videos and audios from <strong>YouTube</strong>, <strong>Facebook</strong>, <strong>Instagram Reels</strong>, and <strong>TikTok without any watermark</strong> at the maximum available resolution.
-            Copy video titles and descriptions with a single click, choose between Full HD MP4 or high-bitrate 320kbps MP3, and save directly to your phone, PC, or Mac.
-            All video files are packaged with standardized H.264 video, AAC audio, and faststart seeking metadata, guaranteeing seamless playback and forward/reverse scrubbing in Windows Photos, QuickTime, and hassle-free uploads to Facebook, WhatsApp, and social apps.
+            ASI Tube is your all-in-one media suite to download videos and audios from <strong>YouTube</strong>,
+            <strong>Facebook</strong>, <strong>Instagram Reels</strong>, and <strong>TikTok without any
+              watermark</strong> at the maximum available resolution.
+            Copy video titles and descriptions with a single click, choose between Full HD MP4 or high-bitrate 320kbps
+            MP3, and save directly to your phone, PC, or Mac.
+            All video files are packaged with standardized H.264 video, AAC audio, and faststart seeking metadata,
+            guaranteeing seamless playback and forward/reverse scrubbing in Windows Photos, QuickTime, and hassle-free
+            uploads to Facebook, WhatsApp, and social apps.
           </p>
         </div>
       </div>
@@ -252,7 +290,8 @@
           <div class="step-card">
             <div class="step-number">02</div>
             <h3>Paste & Preview</h3>
-            <p>Paste into the input box above and click Start. Preview title, full description, and available formats.</p>
+            <p>Paste into the input box above and click Start. Preview title, full description, and available formats.
+            </p>
           </div>
 
           <div class="step-card">
@@ -271,20 +310,23 @@
         <div class="features-grid">
           <div class="feature-item">
             <div class="feature-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <polygon points="10 8 16 12 10 16 10 8"></polygon>
               </svg>
             </div>
             <div>
               <h3>TikTok Video Without Watermark</h3>
-              <p>Download clean, watermark-free TikTok videos at maximum available resolution (1080p Full HD & 720p HD) along with original background audio MP3.</p>
+              <p>Download clean, watermark-free TikTok videos at maximum available resolution (1080p Full HD & 720p HD)
+                along with original background audio MP3.</p>
             </div>
           </div>
 
           <div class="feature-item">
             <div class="feature-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
                 <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
                 <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
@@ -292,56 +334,65 @@
             </div>
             <div>
               <h3>Instagram Reels & Videos</h3>
-              <p>Grab Instagram Reels, videos, and post audio in original crisp quality with full creator captions and high-resolution cover thumbnails.</p>
+              <p>Grab Instagram Reels, videos, and post audio in original crisp quality with full creator captions and
+                high-resolution cover thumbnails.</p>
             </div>
           </div>
 
           <div class="feature-item">
             <div class="feature-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path>
               </svg>
             </div>
             <div>
               <h3>Facebook Video & Reels in HD</h3>
-              <p>Download public Facebook videos, Watch clips, and Reels in Full HD (1080p/720p) and SD without compression artifacts.</p>
+              <p>Download public Facebook videos, Watch clips, and Reels in Full HD (1080p/720p) and SD without
+                compression artifacts.</p>
             </div>
           </div>
 
           <div class="feature-item">
             <div class="feature-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
             </div>
             <div>
               <h3>1-Click Copy Title & Description</h3>
-              <p>Easily copy the complete video title, creator description, hashtags, or both together with dedicated one-click copy buttons and toast confirmation.</p>
+              <p>Easily copy the complete video title, creator description, hashtags, or both together with dedicated
+                one-click copy buttons and toast confirmation.</p>
             </div>
           </div>
 
           <div class="feature-item">
             <div class="feature-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
               </svg>
             </div>
             <div>
               <h3>Faststart Seeking & Social Ready</h3>
-              <p>Every MP4 file contains progressive faststart moov atoms, allowing instantaneous scrubbing in Windows Photos and zero-error Facebook/WhatsApp sharing.</p>
+              <p>Every MP4 file contains progressive faststart moov atoms, allowing instantaneous scrubbing in Windows
+                Photos and zero-error Facebook/WhatsApp sharing.</p>
             </div>
           </div>
 
           <div class="feature-item">
             <div class="feature-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
               </svg>
             </div>
             <div>
               <h3>100% Free & Unlimited</h3>
-              <p>No subscriptions, no registration, no watermarks, and no download limits. Convert and download as many videos as you want.</p>
+              <p>No subscriptions, no registration, no watermarks, and no download limits. Convert and download as many
+                videos as you want.</p>
             </div>
           </div>
         </div>
@@ -356,50 +407,68 @@
           <div class="faq-item">
             <button class="faq-question">
               <span>Can I download TikTok videos without watermark?</span>
-              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
             </button>
             <div class="faq-answer">
-              <p>Yes! When you paste a TikTok video link, ASI Tube automatically extracts the clean, original video stream without any watermark or logo stamp at the maximum available resolution (Full HD / HD), plus the background sound in MP3.</p>
+              <p>Yes! When you paste a TikTok video link, ASI Tube automatically extracts the clean, original video
+                stream without any watermark or logo stamp at the maximum available resolution (Full HD / HD), plus the
+                background sound in MP3.</p>
             </div>
           </div>
 
           <div class="faq-item">
             <button class="faq-question">
               <span>How do I copy the video title and description?</span>
-              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
             </button>
             <div class="faq-answer">
-              <p>Once you paste any video link and click Start, you will see a dedicated "Copy Title" button next to the title, as well as "Copy Description" and "Copy Both" buttons in the description box. Clicking any of them immediately copies the formatted text to your clipboard.</p>
+              <p>Once you paste any video link and click Start, you will see a dedicated "Copy Title" button next to the
+                title, as well as "Copy Description" and "Copy Both" buttons in the description box. Clicking any of
+                them immediately copies the formatted text to your clipboard.</p>
             </div>
           </div>
 
           <div class="faq-item">
             <button class="faq-question">
               <span>Does it support Facebook videos and Instagram Reels?</span>
-              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
             </button>
             <div class="faq-answer">
-              <p>Yes! Simply paste any public Facebook video/reel URL or Instagram Reel/post URL. You will receive direct downloads in Maximum HD MP4, SD MP4, or MP3 audio.</p>
+              <p>Yes! Simply paste any public Facebook video/reel URL or Instagram Reel/post URL. You will receive
+                direct downloads in Maximum HD MP4, SD MP4, or MP3 audio.</p>
             </div>
           </div>
 
           <div class="faq-item">
             <button class="faq-question">
               <span>Can I forward and reverse (seek) the video in Windows Photos?</span>
-              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
             </button>
             <div class="faq-answer">
-              <p>Yes! Our videos place the MP4 moov atom at the front of the file (faststart optimization). This allows Windows Photos, Media Player, and mobile apps to seek backward and forward smoothly without freezing.</p>
+              <p>Yes! Our videos place the MP4 moov atom at the front of the file (faststart optimization). This allows
+                Windows Photos, Media Player, and mobile apps to seek backward and forward smoothly without freezing.
+              </p>
             </div>
           </div>
 
           <div class="faq-item">
             <button class="faq-question">
               <span>Is ASI Tube completely free to use?</span>
-              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
             </button>
             <div class="faq-answer">
-              <p>Yes, ASI Tube is 100% free with unlimited conversions. There are no fees, subscriptions, or hidden paywalls.</p>
+              <p>Yes, ASI Tube is 100% free with unlimited conversions. There are no fees, subscriptions, or hidden
+                paywalls.</p>
             </div>
           </div>
         </div>
@@ -428,7 +497,7 @@
       <button class="modal-close" onclick="UI.closeModal()">✕</button>
       <h3 id="modalTitle" style="font-size: 1.25rem; font-weight: 700; margin-bottom: 8px;">Processing Download</h3>
       <p id="modalStatus" style="color: var(--text-muted); font-size: 0.95rem;">Preparing stream...</p>
-      
+
       <div class="progress-bar-container">
         <div id="modalProgress" class="progress-bar-fill"></div>
       </div>
@@ -441,4 +510,5 @@
   <script src="/js/ui.js"></script>
   <script src="/js/app.js"></script>
 </body>
+
 </html>
