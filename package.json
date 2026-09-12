@@ -21,8 +21,10 @@
   "license": "MIT",
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",
+    "btch-downloader": "^6.3.6",
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "ffmpeg-static": "^5.3.0"
+    "ffmpeg-static": "^5.3.0",
+    "snapsave-media-downloader": "^2.4.1"
   }
 }

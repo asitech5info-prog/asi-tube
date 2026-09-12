@@ -26,8 +26,7 @@ const API = {
     const isAudio = audioOnly === true || audioOnly === 'true' || ['mp3', 'm4a', 'wav', 'flac'].includes(format);
     const fileExt = isAudio ? (format === 'mp3' ? 'mp3' : (format || 'mp3')) : (format || 'mp4');
     const filename = `${cleanTitle}.${fileExt}`;
-    const isYouTube = url && (url.includes('youtube.com') || url.includes('youtu.be'));
-    const cleanDirect = isYouTube ? '' : (directUrl || '');
+    const cleanDirect = directUrl || '';
     const directParam = cleanDirect ? `&directUrl=${encodeURIComponent(cleanDirect)}` : '';
     const onSiteStreamUrl = `/api/stream?url=${encodeURIComponent(url)}&quality=${encodeURIComponent(quality || '1080')}&format=${encodeURIComponent(fileExt)}&audioOnly=${isAudio}&title=${encodeURIComponent(cleanTitle)}${directParam}`;
 
@@ -70,40 +69,150 @@ const API = {
 
   // Client-side fallback if network error
   clientFallbackInfo(rawUrl) {
-    const match = (rawUrl || '').match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
-    if (!match || !match[1]) {
-      throw new Error('Could not retrieve video details from this link. Please verify the URL is public and valid.');
+    const clean = (rawUrl || '').trim();
+    const ytMatch = clean.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
+    const igMatch = clean.match(/(?:instagram\.com|instagr\.am)\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
+    const fbMatch = clean.match(/(?:facebook\.com|fb\.watch)/);
+    const ttMatch = clean.match(/tiktok\.com/);
+
+    if (ytMatch) {
+      const videoId = ytMatch[1];
+      return {
+        id: videoId,
+        url: clean,
+        platform: 'youtube',
+        title: 'YouTube Video',
+        author: 'YouTube Creator',
+        authorUrl: '',
+        duration: 180,
+        durationFormatted: 'HD Video',
+        views: 0,
+        viewsFormatted: 'Trending',
+        thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        description: '',
+        publishedAt: 'Instant',
+        formats: {
+          video: [
+            { quality: '1080', resolution: 'Full HD (1080p MP4)', format: 'mp4', fps: 60, estimatedSize: 'Full HD', directUrl: null, note: 'Best 1080p' },
+            { quality: '720', resolution: 'HD (720p MP4)', format: 'mp4', fps: 30, estimatedSize: 'HD', directUrl: null, note: 'Standard HD' },
+            { quality: '480', resolution: 'SD (480p MP4)', format: 'mp4', fps: 30, estimatedSize: 'SD', directUrl: null, note: 'Standard Definition' },
+            { quality: '360', resolution: 'Mobile (360p MP4)', format: 'mp4', fps: 30, estimatedSize: 'Mobile', directUrl: null, note: 'Lightweight' }
+          ],
+          audio: [
+            { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Studio Master Quality' },
+            { quality: '128', bitrate: '128 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Standard MP3' }
+          ],
+          thumbnails: [
+            { resolution: '1280x720', quality: 'Ultra HD', url: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` },
+            { resolution: '640x480', quality: 'High Quality', url: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` }
+          ]
+        }
+      };
     }
-    const videoId = match[1];
+
+    if (igMatch) {
+      const shortcode = igMatch[1];
+      return {
+        id: shortcode,
+        url: clean,
+        platform: 'instagram',
+        title: `Instagram Reel (${shortcode})`,
+        author: 'Instagram Creator',
+        authorUrl: '',
+        duration: 30,
+        durationFormatted: 'HD Reel',
+        views: 0,
+        viewsFormatted: 'Viral',
+        thumbnail: '',
+        description: '',
+        formats: {
+          video: [
+            { quality: '1080', resolution: 'Full HD 1080p (Original MP4)', format: 'mp4', fps: 30, estimatedSize: 'HD Video', directUrl: null, note: 'Full HD' },
+            { quality: '720', resolution: 'HD (720p MP4)', format: 'mp4', fps: 30, estimatedSize: 'Fast HD', directUrl: null, note: 'Standard HD' }
+          ],
+          audio: [
+            { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Audio Track' }
+          ],
+          thumbnails: []
+        }
+      };
+    }
+
+    if (fbMatch) {
+      return {
+        id: `fb_${Date.now()}`,
+        url: clean,
+        platform: 'facebook',
+        title: 'Facebook Video',
+        author: 'Facebook Creator',
+        authorUrl: '',
+        duration: 60,
+        durationFormatted: 'HD Video',
+        views: 0,
+        viewsFormatted: 'Trending',
+        thumbnail: '',
+        description: '',
+        formats: {
+          video: [
+            { quality: '1080', resolution: 'Full HD (Facebook MP4)', format: 'mp4', fps: 30, estimatedSize: 'HD Video', directUrl: null, note: 'Full HD' },
+            { quality: '720', resolution: 'HD (720p MP4)', format: 'mp4', fps: 30, estimatedSize: 'Fast HD', directUrl: null, note: 'Standard HD' }
+          ],
+          audio: [
+            { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Studio Quality Audio' }
+          ],
+          thumbnails: []
+        }
+      };
+    }
+
+    if (ttMatch) {
+      return {
+        id: `tik_${Date.now()}`,
+        url: clean,
+        platform: 'tiktok',
+        title: 'TikTok Video',
+        author: 'TikTok Creator',
+        authorUrl: '',
+        duration: 30,
+        durationFormatted: 'HD Video',
+        views: 0,
+        viewsFormatted: 'Trending',
+        thumbnail: '',
+        description: '',
+        formats: {
+          video: [
+            { quality: '1080', resolution: 'Full HD 1080p - Lossless (No Watermark)', format: 'mp4', fps: 60, estimatedSize: 'HD Video', directUrl: null, note: 'Lossless (No Watermark)' },
+            { quality: '720', resolution: 'HD 720p - High Speed (No Watermark)', format: 'mp4', fps: 30, estimatedSize: 'Fast HD', directUrl: null, note: 'High Speed (No Watermark)' }
+          ],
+          audio: [
+            { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Studio Quality Audio' }
+          ],
+          thumbnails: []
+        }
+      };
+    }
 
     return {
-      id: videoId,
-      url: rawUrl,
-      title: 'YouTube Video',
-      author: 'YouTube Creator',
+      id: `media_${Date.now()}`,
+      url: clean,
+      platform: 'generic',
+      title: 'Media Stream',
+      author: 'Creator',
       authorUrl: '',
-      duration: 180,
+      duration: 60,
       durationFormatted: 'HD Video',
       views: 0,
       viewsFormatted: 'Trending',
-      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      thumbnail: '',
       description: '',
-      publishedAt: 'Instant',
       formats: {
         video: [
-          { quality: '1080', resolution: 'Full HD (1080p60)', format: 'mp4', fps: 60, estimatedSize: 'Full HD', directUrl: null, note: 'Best 1080p' },
-          { quality: '720', resolution: 'HD (720p)', format: 'mp4', fps: 30, estimatedSize: 'HD', directUrl: null, note: 'Standard HD' },
-          { quality: '480', resolution: 'SD (480p)', format: 'mp4', fps: 30, estimatedSize: 'SD', directUrl: null, note: 'Standard Definition' },
-          { quality: '360', resolution: 'Mobile (360p)', format: 'mp4', fps: 30, estimatedSize: 'Mobile', directUrl: null, note: 'Lightweight' }
+          { quality: '1080', resolution: 'Full HD (1080p MP4)', format: 'mp4', fps: 30, estimatedSize: 'HD Video', directUrl: null, note: 'Full HD' }
         ],
         audio: [
-          { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Studio Master Quality' },
-          { quality: '128', bitrate: '128 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Standard MP3' }
+          { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Studio Quality Audio' }
         ],
-        thumbnails: [
-          { resolution: '1280x720', quality: 'Ultra HD', url: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` },
-          { resolution: '640x480', quality: 'High Quality', url: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` }
-        ]
+        thumbnails: []
       }
     };
   }

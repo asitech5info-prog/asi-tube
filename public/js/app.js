@@ -145,7 +145,7 @@ const App = {
       }
 
       // TikTok
-      if (host.includes('tiktok.com')) {
+      if (host.includes('tiktok.com') || host.includes('douyin.com')) {
         return {
           valid: true,
           platform: 'tiktok',
@@ -154,7 +154,7 @@ const App = {
       }
 
       // Facebook
-      if (host.includes('facebook.com') || host.includes('fb.watch') || host.includes('fb.com')) {
+      if (host.includes('facebook.com') || host.includes('fb.watch') || host.includes('fb.com') || host.includes('fb.gg')) {
         return {
           valid: true,
           platform: 'facebook',
@@ -163,7 +163,7 @@ const App = {
       }
 
       // Instagram
-      if (host.includes('instagram.com')) {
+      if (host.includes('instagram.com') || host.includes('instagr.am')) {
         return {
           valid: true,
           platform: 'instagram',
