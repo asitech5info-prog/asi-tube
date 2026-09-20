@@ -3,7 +3,8 @@
 // Guarantees 100% compliant H.264 (AVC) + AAC MP4 videos with +faststart moov atom seeking at byte 0.
 // Resolves timeline seeking issues and uploader rejection across all platforms (Instagram, TikTok, WhatsApp, Facebook).
 
-import { spawn } from 'child_process';
+import { spawn, exec } from 'child_process';
+import { Readable } from 'stream';
 import ffmpegPath from 'ffmpeg-static';
 import fs from 'fs';
 import path from 'path';
@@ -335,6 +336,168 @@ async function resolveCloudStream(url, format, quality, isAudio) {
   throw new Error('Timeout waiting for cloud stream');
 }
 
+// Local Python extractor fallback (extracts Facebook, TikTok, Instagram direct stream URLs)
+function resolveWithPython(url) {
+  if (process.env.VERCEL === '1' || process.env.NOW_REGION != null) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    const scriptPath = path.join(process.cwd(), 'extractor.py');
+    const safeUrl = url.replace(/"/g, '\\"');
+    exec(`python "${scriptPath}" "${safeUrl}"`, { timeout: 35000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
+      if (err || !stdout) return resolve(null);
+      try {
+        const data = JSON.parse(stdout.trim());
+        if (data && data.title && !data.error) return resolve(data);
+      } catch (e) { }
+      resolve(null);
+    });
+  });
+}
+
+// Ultra-fast streaming directly to client (Time To First Byte < 500ms)
+// Forwards HTTP Range headers for seekable playback and resumable downloads
+async function streamDirectToClient(req, res, directUrl, filename, contentType, cleanUrl) {
+  if (req.socket) {
+    req.socket.setTimeout(600000);
+    req.socket.setKeepAlive(true, 5000);
+  }
+  if (res.setTimeout) {
+    res.setTimeout(600000);
+  }
+
+  const upstreamHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    'Accept': '*/*',
+    'Accept-Encoding': 'identity'
+  };
+
+  if (directUrl.includes('vidssave') || directUrl.includes('api-ak.vidssave')) {
+    upstreamHeaders['Referer'] = 'https://vidssave.com/';
+    upstreamHeaders['Origin'] = 'https://vidssave.com';
+  } else if (directUrl.includes('tikmate')) {
+    upstreamHeaders['Referer'] = 'https://tikmate.app/';
+  } else if (directUrl.includes('ssstik')) {
+    upstreamHeaders['Referer'] = 'https://ssstik.io/';
+  }
+
+  const clientRange = req.headers.range;
+  if (clientRange) {
+    upstreamHeaders['Range'] = clientRange;
+  }
+
+  const controller = new AbortController();
+  const onReqClose = () => {
+    if (!res.writableEnded) {
+      controller.abort();
+    }
+  };
+  req.on('close', onReqClose);
+
+  const upstream = await fetch(directUrl, {
+    method: 'GET',
+    headers: upstreamHeaders,
+    signal: controller.signal
+  });
+
+  if (!upstream.ok && upstream.status !== 206) {
+    req.off('close', onReqClose);
+    throw new Error(`Upstream stream returned status ${upstream.status} ${upstream.statusText}`);
+  }
+
+  const safeFilename = encodeURIComponent(filename);
+  const disposition = `attachment; filename="${safeFilename}"; filename*=UTF-8''${safeFilename}`;
+
+  let finalContentType = contentType;
+  const upstreamType = upstream.headers.get('content-type');
+  if (upstreamType && (upstreamType.includes('video/') || upstreamType.includes('audio/'))) {
+    finalContentType = upstreamType;
+  }
+
+  const clientHeaders = {
+    'Content-Type': finalContentType,
+    'Accept-Ranges': 'bytes',
+    'Content-Disposition': disposition,
+    'Cache-Control': 'public, max-age=3600'
+  };
+
+  const contentLength = upstream.headers.get('content-length');
+  if (contentLength) {
+    clientHeaders['Content-Length'] = contentLength;
+  }
+
+  const contentRange = upstream.headers.get('content-range');
+  if (contentRange) {
+    clientHeaders['Content-Range'] = contentRange;
+  }
+
+  const statusCode = upstream.status === 206 ? 206 : (clientRange && contentRange ? 206 : 200);
+
+  res.writeHead(statusCode, clientHeaders);
+
+  if (upstream.body) {
+    const nodeStream = Readable.fromWeb(upstream.body);
+    nodeStream.on('error', (err) => {
+      console.warn('Direct stream pipe error:', err.message);
+      if (!res.writableEnded) {
+        res.end();
+      }
+    });
+    nodeStream.pipe(res);
+  } else {
+    res.end();
+  }
+}
+
+// Direct stdout streaming for audio using yt-dlp
+function streamAudioYtDlp(req, res, cleanUrl, filename, quality) {
+  return new Promise((resolve, reject) => {
+    if (req.socket) {
+      req.socket.setTimeout(600000);
+      req.socket.setKeepAlive(true, 5000);
+    }
+    if (res.setTimeout) {
+      res.setTimeout(600000);
+    }
+
+    const safeFilename = encodeURIComponent(filename);
+    const disposition = `attachment; filename="${safeFilename}"; filename*=UTF-8''${safeFilename}`;
+
+    res.writeHead(200, {
+      'Content-Type': 'audio/mpeg',
+      'Content-Disposition': disposition,
+      'Accept-Ranges': 'none',
+      'Cache-Control': 'no-cache'
+    });
+
+    const audioBitrate = quality && ['320', '256', '192', '128'].includes(quality) ? `${quality}k` : '320k';
+    const proc = spawn('yt-dlp', [
+      '--no-playlist',
+      '--no-warnings',
+      '-x',
+      '--audio-format', 'mp3',
+      '--audio-quality', audioBitrate,
+      '-o', '-',
+      cleanUrl
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    req.on('close', () => {
+      if (!proc.killed) proc.kill();
+    });
+
+    proc.stdout.pipe(res);
+
+    proc.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`yt-dlp audio stream exited with code ${code}`));
+    });
+
+    proc.on('error', (err) => {
+      reject(err);
+    });
+  });
+}
+
 // Direct stream processor: Downloads media and guarantees +faststart moov atom seeking
 async function processDirectStream(directUrl, targetFilePath, isAudio, fileExt, quality) {
   const tempPartPath = `${targetFilePath}.download.part`;
@@ -459,6 +622,60 @@ export default async function handler(req, res) {
     flac: 'audio/flac'
   };
   const contentType = contentTypes[fileExt] || (isAudio ? 'audio/mpeg' : 'video/mp4');
+
+  // FAST PATH 1: If cleanDirectUrl was provided (from /api/info), stream directly to client immediately (< 500ms)
+  if (cleanDirectUrl && cleanDirectUrl.startsWith('http')) {
+    try {
+      await streamDirectToClient(req, res, cleanDirectUrl, filename, contentType, cleanUrl);
+      return;
+    } catch (directErr) {
+      console.warn('Provided directUrl stream failed, attempting refreshed resolution...', directErr.message);
+    }
+  }
+
+  // FAST PATH 2: If YouTube, resolve direct stream via Vidssave (< 1s) and stream immediately
+  if (videoId) {
+    try {
+      const ytDirect = await resolveYouTubeDirect(cleanUrl, quality, isAudio);
+      if (ytDirect) {
+        await streamDirectToClient(req, res, ytDirect, filename, contentType, cleanUrl);
+        return;
+      }
+    } catch (ytErr) {
+      console.warn('Vidssave direct stream error:', ytErr.message);
+    }
+  }
+
+  // FAST PATH 3: For Facebook, TikTok, Instagram without directUrl, resolve with Python and stream directly
+  try {
+    const pyData = await resolveWithPython(cleanUrl);
+    if (pyData) {
+      let candidateUrl = null;
+      if (isAudio) {
+        candidateUrl = pyData.audio_url || pyData.video_streams?.[0]?.url;
+      } else {
+        const targetQ = (quality || '1080').replace(/[^0-9]/g, '');
+        const match = pyData.video_streams?.find(v => v.quality === targetQ && v.url);
+        candidateUrl = match ? match.url : pyData.video_streams?.[0]?.url;
+      }
+      if (candidateUrl && candidateUrl.startsWith('http')) {
+        await streamDirectToClient(req, res, candidateUrl, filename, contentType, cleanUrl);
+        return;
+      }
+    }
+  } catch (pyResolveErr) {
+    console.warn('Python resolution error in stream:', pyResolveErr.message);
+  }
+
+  // FAST PATH 4: For audio-only without direct stream URL, stream from yt-dlp stdout directly
+  if (isAudio) {
+    try {
+      await streamAudioYtDlp(req, res, cleanUrl, filename, quality);
+      return;
+    } catch (audioErr) {
+      console.warn('yt-dlp audio stream failed:', audioErr.message);
+    }
+  }
 
   // Compute unique hash key for this media file
   const hashSource = cleanDirectUrl ? cleanDirectUrl : `${videoId || cleanUrl}_${quality}_${fileExt}_${isAudio}`;

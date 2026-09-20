@@ -24,9 +24,63 @@ def extract_tiktok(url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
     }
+    
+    # 1. Try Tikmate API (Fast, reliable, watermark-free)
+    try:
+        req_data = urllib.parse.urlencode({'url': url}).encode('utf-8')
+        req = urllib.request.Request(
+            'https://api.tikmate.app/api/lookup',
+            data=req_data,
+            headers={**headers, 'Content-Type': 'application/x-www-form-urlencoded'}
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode('utf-8', errors='ignore'))
+            if data.get('success') and data.get('token') and data.get('id'):
+                video_id = str(data.get('id'))
+                token = data.get('token')
+                hd_url = f"https://tikmate.app/download/{token}/{video_id}.mp4?hd=1"
+                sd_url = f"https://tikmate.app/download/{token}/{video_id}.mp4"
+                title = data.get('desc') or 'TikTok Video'
+                author = data.get('author_name') or data.get('author_id') or 'TikTok Creator'
+                thumb = data.get('cover') or data.get('dynamic_cover') or ''
+                
+                return {
+                    'id': video_id,
+                    'url': url,
+                    'platform': 'tiktok',
+                    'title': title,
+                    'description': title,
+                    'author': author,
+                    'duration': 30,
+                    'views': data.get('like_count') or 0,
+                    'thumbnail': thumb,
+                    'video_streams': [
+                        {
+                            'quality': '1080',
+                            'resolution': 'Full HD 1080p - Original (No Watermark)',
+                            'format': 'mp4',
+                            'fps': 60,
+                            'url': hd_url,
+                            'filesize': None
+                        },
+                        {
+                            'quality': '720',
+                            'resolution': 'HD 720p - High Speed (No Watermark)',
+                            'format': 'mp4',
+                            'fps': 30,
+                            'url': sd_url,
+                            'filesize': None
+                        }
+                    ],
+                    'audio_url': None
+                }
+    except Exception:
+        pass
+
+    # 2. Try TikWM as secondary fallback
     api_url = f'https://www.tikwm.com/api/?url={urllib.parse.quote(url)}&hd=1'
     req = urllib.request.Request(api_url, headers=headers)
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=10) as resp:
         raw = resp.read().decode('utf-8', errors='ignore')
         data = json.loads(raw)
     
@@ -43,7 +97,6 @@ def extract_tiktok(url):
     music_url = d.get('music') or ''
 
     video_streams = []
-    # Maximum quality without watermark: Lossless 1080p Full HD if available
     raw_hd = d.get('hdplay')
     if raw_hd:
         hd_url = raw_hd if raw_hd.startswith('http') else f"https://www.tikwm.com{raw_hd}"

@@ -109,7 +109,7 @@ function extractWithPython(url) {
   return new Promise((resolve) => {
     const scriptPath = path.join(process.cwd(), 'extractor.py');
     const safeUrl = url.replace(/"/g, '\\"');
-    exec(`python "${scriptPath}" "${safeUrl}"`, { timeout: 12000, maxBuffer: 5 * 1024 * 1024 }, (err, stdout) => {
+    exec(`python "${scriptPath}" "${safeUrl}"`, { timeout: 35000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
       if (err || !stdout) {
         return resolve(null);
       }
@@ -244,13 +244,146 @@ async function extractTikTokNative(rawUrl) {
   try {
     const url = await expandRedirectUrl(rawUrl);
 
-    // Tier 1: TikWM with hd=1 (fetches both hdplay and play to pick maximum lossless bitrate)
+    // Tier 1: Tikmate API (Ultra-fast, 1080p & 720p lossless no-watermark streams)
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch('https://api.tikmate.app/api/lookup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: new URLSearchParams({ url }).toString(),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const d = await res.json().catch(() => null);
+        if (d && d.success && d.token && d.id) {
+          const videoId = String(d.id);
+          const token = d.token;
+          const hdUrl = `https://tikmate.app/download/${token}/${videoId}.mp4?hd=1`;
+          const sdUrl = `https://tikmate.app/download/${token}/${videoId}.mp4`;
+          const title = d.desc || 'TikTok Video';
+          const author = d.author_name || d.author_id || 'TikTok Creator';
+          const thumb = d.cover || d.dynamic_cover || '';
+
+          return {
+            id: videoId,
+            url: url,
+            platform: 'tiktok',
+            title: title,
+            description: title,
+            author: author,
+            authorUrl: d.author_id ? `https://www.tiktok.com/@${d.author_id}` : '',
+            duration: 30,
+            durationFormatted: 'HD Video',
+            views: d.like_count || 0,
+            viewsFormatted: formatNumber(d.like_count),
+            thumbnail: thumb,
+            formats: {
+              video: [
+                {
+                  quality: '1080',
+                  resolution: 'Full HD 1080p - Original Lossless (No Watermark)',
+                  format: 'mp4',
+                  fps: 60,
+                  estimatedSize: 'HD Video',
+                  directUrl: hdUrl,
+                  note: 'Lossless Original Full HD (No Watermark)'
+                },
+                {
+                  quality: '720',
+                  resolution: 'HD 720p - High Speed (No Watermark)',
+                  format: 'mp4',
+                  fps: 30,
+                  estimatedSize: 'Fast HD',
+                  directUrl: sdUrl,
+                  note: 'Fast HD (No Watermark)'
+                }
+              ],
+              audio: [
+                { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Studio Quality Audio' }
+              ],
+              thumbnails: thumb ? [{ resolution: 'Original HD', quality: 'Cover Art', url: thumb }] : []
+            },
+            source: 'tikmate-hd'
+          };
+        }
+      }
+    } catch (tikmateErr) { }
+
+    // Tier 2: SSSTik Engine (No-watermark MP4 streams)
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch('https://ssstik.io/abc?url=dl', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: new URLSearchParams({ id: url, locale: 'en', tt: '1' }).toString(),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const html = await res.text();
+        const dlMatch = html.match(/href="([^"]+)"[^>]*class="[^"]*without_watermark[^"]*"/i) || html.match(/href="([^"]+)"[^>]*download/i);
+        const titleMatch = html.match(/<p class="maintext">([^<]+)<\/p>/i);
+        if (dlMatch && dlMatch[1] && dlMatch[1].startsWith('http')) {
+          const videoUrl = dlMatch[1];
+          const title = titleMatch ? titleMatch[1].trim() : 'TikTok Video';
+          return {
+            id: `tik_${Date.now()}`,
+            url: url,
+            platform: 'tiktok',
+            title: title,
+            description: title,
+            author: 'TikTok Creator',
+            authorUrl: '',
+            duration: 30,
+            durationFormatted: 'HD Video',
+            views: 0,
+            viewsFormatted: 'Trending',
+            thumbnail: '',
+            formats: {
+              video: [
+                {
+                  quality: '1080',
+                  resolution: 'Full HD 1080p - Lossless (No Watermark)',
+                  format: 'mp4',
+                  fps: 60,
+                  estimatedSize: 'HD Video',
+                  directUrl: videoUrl,
+                  note: 'Lossless Original (No Watermark)'
+                }
+              ],
+              audio: [
+                { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Audio Track' }
+              ],
+              thumbnails: []
+            },
+            source: 'ssstik-nowm'
+          };
+        }
+      }
+    } catch (ssstikErr) { }
+
+    // Tier 3: TikWM with hd=1
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
       const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
-        }
+        },
+        signal: controller.signal
       });
+      clearTimeout(timeout);
 
       if (res.ok) {
         const json = await res.json().catch(() => null);
@@ -350,123 +483,6 @@ async function extractTikTokNative(rawUrl) {
         }
       }
     } catch (tikwmErr) { }
-
-    // Tier 2: ttdl from btch-downloader (High-Definition TikTok IO engine)
-    try {
-      const ttRes = await ttdl(url);
-      if (ttRes && ttRes.status && ttRes.video?.length > 0) {
-        const videoUrl = ttRes.video[0];
-        const audioUrl = ttRes.audio?.[0] || null;
-        const title = ttRes.title || 'TikTok Video';
-        const thumbnail = ttRes.thumbnail || '';
-
-        return {
-          id: `tik_${Date.now()}`,
-          url: url,
-          platform: 'tiktok',
-          title: title,
-          description: title,
-          author: 'TikTok Creator',
-          authorUrl: '',
-          duration: 30,
-          durationFormatted: 'HD Video',
-          views: 0,
-          viewsFormatted: 'Trending',
-          thumbnail: thumbnail,
-          formats: {
-            video: [
-              {
-                quality: '1080',
-                resolution: 'Full HD 1080p - Lossless Original (No Watermark)',
-                format: 'mp4',
-                fps: 60,
-                estimatedSize: 'HD Video',
-                directUrl: videoUrl,
-                note: 'Lossless Original (No Watermark)'
-              }
-            ],
-            audio: [
-              { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: audioUrl, note: 'Studio Quality Audio' }
-            ],
-            thumbnails: thumbnail ? [{ resolution: 'Original HD', quality: 'Cover Photo', url: thumbnail }] : []
-          },
-          source: 'ttdl-btch'
-        };
-      }
-    } catch (ttdlErr) { }
-
-    // Tier 3: Snapsave engine for TikTok
-    try {
-      const snapRes = await snapsave(url).catch(() => null);
-      if (snapRes && snapRes.success && snapRes.data?.media?.length > 0) {
-        const snapMedia = snapRes.data.media;
-        const videoUrl = snapMedia[0]?.url;
-        const title = snapRes.data.description || 'TikTok Video';
-        const thumbnail = snapRes.data.preview || '';
-
-        return {
-          id: `tik_${Date.now()}`,
-          url: url,
-          platform: 'tiktok',
-          title: title,
-          description: title,
-          author: 'TikTok Creator',
-          authorUrl: '',
-          duration: 30,
-          durationFormatted: 'HD Video',
-          views: 0,
-          viewsFormatted: 'Viral',
-          thumbnail: thumbnail,
-          formats: {
-            video: [
-              {
-                quality: '1080',
-                resolution: 'Full HD 1080p - Lossless (No Watermark)',
-                format: 'mp4',
-                fps: 60,
-                estimatedSize: 'HD Video',
-                directUrl: videoUrl,
-                note: 'Lossless (No Watermark)'
-              }
-            ],
-            audio: [
-              { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Audio Track' }
-            ],
-            thumbnails: thumbnail ? [{ resolution: 'Original HD', quality: 'Cover Photo', url: thumbnail }] : []
-          },
-          source: 'snapsave-nowm'
-        };
-      }
-    } catch (snapErr) { }
-
-    // Tier 4: Universal TikTok fallback with clean video ID
-    const matchId = url.match(/video\/([0-9]+)/);
-    const fallbackId = matchId ? matchId[1] : `tik_${Date.now()}`;
-    return {
-      id: fallbackId,
-      url: url,
-      platform: 'tiktok',
-      title: 'TikTok Video',
-      description: 'TikTok Video without watermark',
-      author: 'TikTok Creator',
-      authorUrl: '',
-      duration: 30,
-      durationFormatted: 'HD Video',
-      views: 0,
-      viewsFormatted: 'Trending',
-      thumbnail: '',
-      formats: {
-        video: [
-          { quality: '1080', resolution: 'Full HD 1080p - Lossless (No Watermark)', format: 'mp4', fps: 60, estimatedSize: 'HD Video', directUrl: null, note: 'Lossless (No Watermark)' },
-          { quality: '720', resolution: 'HD 720p - High Speed (No Watermark)', format: 'mp4', fps: 30, estimatedSize: 'Fast HD', directUrl: null, note: 'High Speed (No Watermark)' }
-        ],
-        audio: [
-          { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Studio Quality Audio' }
-        ],
-        thumbnails: []
-      },
-      source: 'tiktok-universal'
-    };
   } catch (e) {
     console.warn('TikTok native extraction error:', e.message);
   }
@@ -655,35 +671,6 @@ async function extractFacebookNative(rawUrl) {
         }
       }
     } catch (htmlErr) { }
-
-    // Tier 4: Universal Facebook fallback parsing ID from URL
-    const fbIdMatch = url.match(/(?:videos|posts|watch\/?\?v=|reel\/|share\/(?:v|r)\/)([0-9]+)/);
-    const fbId = fbIdMatch ? fbIdMatch[1] : `fb_${Date.now()}`;
-    return {
-      id: fbId,
-      url: url,
-      platform: 'facebook',
-      title: `Facebook Video (${fbId})`,
-      description: `Facebook Video (${fbId})`,
-      author: 'Facebook Creator',
-      authorUrl: '',
-      duration: 60,
-      durationFormatted: 'HD Video',
-      views: 0,
-      viewsFormatted: 'Trending',
-      thumbnail: '',
-      formats: {
-        video: [
-          { quality: '1080', resolution: 'Full HD / HD (Facebook MP4)', format: 'mp4', fps: 30, estimatedSize: 'HD Video', directUrl: null, note: 'High Definition' },
-          { quality: '720', resolution: 'HD 720p (Facebook MP4)', format: 'mp4', fps: 30, estimatedSize: 'Fast HD', directUrl: null, note: 'Standard HD' }
-        ],
-        audio: [
-          { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Studio Quality MP3' }
-        ],
-        thumbnails: []
-      },
-      source: 'facebook-universal'
-    };
   } catch (e) {
     console.warn('Facebook native extraction error:', e.message);
   }
@@ -759,79 +746,45 @@ async function extractInstagramNative(rawUrl) {
 
           const thumbMatch = html.match(/"display_url":"([^"]+)"/i) || html.match(/class="EmbeddedMediaImage"[^>]*src="([^"]+)"/i);
           const thumbnail = thumbMatch ? thumbMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '') : '';
+          const videoMatch = html.match(/<video[^>]+src="([^"]+)"/i) || html.match(/"video_url":"([^"]+)"/i);
+          const videoUrl = videoMatch ? videoMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '') : null;
 
-          return {
-            id: shortcode,
-            url: url,
-            platform: 'instagram',
-            title: caption.slice(0, 90),
-            description: caption,
-            author: author,
-            authorUrl: `https://www.instagram.com/${author}`,
-            duration: 30,
-            durationFormatted: 'HD Reel',
-            views: 0,
-            viewsFormatted: 'Trending',
-            thumbnail: thumbnail,
-            formats: {
-              video: [
-                {
-                  quality: '1080',
-                  resolution: 'Full HD 1080p (Original MP4)',
-                  format: 'mp4',
-                  fps: 30,
-                  estimatedSize: 'HD Video',
-                  directUrl: null,
-                  note: 'Seekable MP4'
-                },
-                {
-                  quality: '720',
-                  resolution: 'HD 720p (High Speed MP4)',
-                  format: 'mp4',
-                  fps: 30,
-                  estimatedSize: 'Fast HD',
-                  directUrl: null,
-                  note: 'Standard MP4'
-                }
-              ],
-              audio: [
-                { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Studio Master Audio' }
-              ],
-              thumbnails: thumbnail ? [{ resolution: 'Original HD', quality: 'Cover Photo', url: thumbnail }] : []
-            },
-            source: 'instagram-embed-resolver'
-          };
+          if (videoUrl) {
+            return {
+              id: shortcode,
+              url: url,
+              platform: 'instagram',
+              title: caption.slice(0, 90),
+              description: caption,
+              author: author,
+              authorUrl: `https://www.instagram.com/${author}`,
+              duration: 30,
+              durationFormatted: 'HD Reel',
+              views: 0,
+              viewsFormatted: 'Trending',
+              thumbnail: thumbnail,
+              formats: {
+                video: [
+                  {
+                    quality: '1080',
+                    resolution: 'Full HD 1080p (Original MP4)',
+                    format: 'mp4',
+                    fps: 30,
+                    estimatedSize: 'HD Video',
+                    directUrl: videoUrl,
+                    note: 'Full HD'
+                  }
+                ],
+                audio: [
+                  { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: videoUrl, note: 'Studio Master Audio' }
+                ],
+                thumbnails: thumbnail ? [{ resolution: 'Original HD', quality: 'Cover Photo', url: thumbnail }] : []
+              },
+              source: 'instagram-embed-resolver'
+            };
+          }
         }
       } catch (embedErr) { }
-    }
-
-    // Tier 3: Universal Instagram Fallback with Shortcode Recognition
-    if (shortcode) {
-      return {
-        id: shortcode,
-        url: url,
-        platform: 'instagram',
-        title: `Instagram Reel (${shortcode})`,
-        description: `Instagram Reel video (${shortcode})`,
-        author: 'Instagram Creator',
-        authorUrl: '',
-        duration: 30,
-        durationFormatted: 'HD Reel',
-        views: 0,
-        viewsFormatted: 'Trending',
-        thumbnail: '',
-        formats: {
-          video: [
-            { quality: '1080', resolution: 'Full HD 1080p (Original MP4)', format: 'mp4', fps: 30, estimatedSize: 'HD Video', directUrl: null, note: 'Full HD Seekable MP4' },
-            { quality: '720', resolution: 'HD (720p MP4)', format: 'mp4', fps: 30, estimatedSize: 'Fast HD', directUrl: null, note: 'Standard HD' }
-          ],
-          audio: [
-            { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: '~ MB', directUrl: null, note: 'Studio Master Audio' }
-          ],
-          thumbnails: []
-        },
-        source: 'instagram-universal'
-      };
     }
   } catch (e) {
     console.warn('Instagram multi-tier error:', e.message);
@@ -893,6 +846,68 @@ async function fetchFromOEmbed(videoId, rawUrl) {
   return null;
 }
 
+function formatPythonResponse(pyData, cleanUrl, platform, videoId) {
+  const duration = pyData.duration || 60;
+  const detectedPlatform = pyData.platform || platform;
+
+  const videoFormats = (pyData.video_streams || []).map(vs => ({
+    quality: vs.quality,
+    resolution: vs.resolution,
+    format: vs.format || 'mp4',
+    fps: vs.fps || 30,
+    estimatedSize: vs.filesize ? formatBytes(vs.filesize) : calculateEstimatedSize(duration, vs.quality),
+    directUrl: vs.url || null,
+    note: vs.quality >= 1080 ? (detectedPlatform === 'tiktok' ? 'No Watermark Full HD' : 'Full HD') : 'HD'
+  }));
+
+  const directAudio = pyData.audio_url || (videoFormats[0]?.directUrl || null);
+  const audioFormats = [
+    { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: calculateEstimatedSize(duration, '320'), directUrl: directAudio, note: 'Studio Quality' },
+    { quality: '256', bitrate: '256 kbps MP3', format: 'mp3', estimatedSize: calculateEstimatedSize(duration, '256'), directUrl: directAudio, note: 'High Definition' },
+    { quality: '128', bitrate: '128 kbps MP3', format: 'mp3', estimatedSize: calculateEstimatedSize(duration, '128'), directUrl: directAudio, note: 'Standard MP3' },
+    { quality: 'm4a', bitrate: 'Original Audio Stream', format: 'm4a', estimatedSize: calculateEstimatedSize(duration, '192'), directUrl: directAudio, note: 'Native Audio' }
+  ];
+
+  const thumbnails = [];
+  if (pyData.thumbnail) {
+    thumbnails.push({
+      resolution: 'Original HD',
+      quality: 'Cover Art / Thumbnail',
+      url: pyData.thumbnail
+    });
+  }
+  if (videoId) {
+    thumbnails.push(
+      { resolution: '1280x720', quality: 'Ultra HD', url: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` },
+      { resolution: '640x480', quality: 'High Quality', url: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` }
+    );
+  }
+
+  return {
+    id: pyData.id || videoId || `media_${Date.now()}`,
+    url: cleanUrl,
+    platform: detectedPlatform,
+    title: pyData.title,
+    description: pyData.description || '',
+    author: pyData.author,
+    authorUrl: '',
+    duration: duration,
+    durationFormatted: formatDuration(duration),
+    views: pyData.views || 0,
+    viewsFormatted: formatNumber(pyData.views),
+    thumbnail: pyData.thumbnail || (videoId ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` : ''),
+    formats: {
+      video: videoFormats.length > 0 ? videoFormats : [
+        { quality: '1080', resolution: 'Full HD (1080p)', format: 'mp4', fps: 30, estimatedSize: calculateEstimatedSize(duration, '1080'), directUrl: null },
+        { quality: '720', resolution: 'HD (720p)', format: 'mp4', fps: 30, estimatedSize: calculateEstimatedSize(duration, '720'), directUrl: null }
+      ],
+      audio: audioFormats,
+      thumbnails: thumbnails
+    },
+    source: detectedPlatform === 'tiktok' ? 'tikwm-nowm' : 'yt-dlp'
+  };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -912,26 +927,34 @@ export default async function handler(req, res) {
   const platform = detectPlatform(cleanUrl);
   const videoId = extractYouTubeId(cleanUrl);
 
-  // 1. TikTok: High-speed native extraction (Full HD 1080p Lossless No-WM)
+  // 1. TikTok: High-speed native extraction (Tikmate 1080p + SSSTik + TikWM)
   if (platform === 'tiktok') {
     const tikData = await extractTikTokNative(cleanUrl);
-    if (tikData && tikData.title) {
+    if (tikData && tikData.title && tikData.formats?.video?.some(v => v.directUrl)) {
       return res.status(200).json(tikData);
     }
   }
 
-  // 2. Facebook: Direct HD streams via Snapsave + fbdown + OpenGraph
+  // 2. Facebook: Direct HD streams via local yt-dlp first (returns direct 1080p/720p fbcdn URLs in 9s)
   if (platform === 'facebook') {
+    const pyData = await extractWithPython(cleanUrl);
+    if (pyData && pyData.title && pyData.video_streams?.length > 0) {
+      return res.status(200).json(formatPythonResponse(pyData, cleanUrl, platform, videoId));
+    }
     const fbData = await extractFacebookNative(cleanUrl);
-    if (fbData && fbData.title) {
+    if (fbData && fbData.title && fbData.formats?.video?.some(v => v.directUrl)) {
       return res.status(200).json(fbData);
     }
   }
 
   // 3. Instagram: Multi-tier extraction (Reels & Posts)
   if (platform === 'instagram') {
+    const pyData = await extractWithPython(cleanUrl);
+    if (pyData && pyData.title && pyData.video_streams?.length > 0) {
+      return res.status(200).json(formatPythonResponse(pyData, cleanUrl, platform, videoId));
+    }
     const igData = await extractInstagramNative(cleanUrl);
-    if (igData && igData.title) {
+    if (igData && igData.title && igData.formats?.video?.some(v => v.directUrl)) {
       return res.status(200).json(igData);
     }
   }
@@ -939,74 +962,15 @@ export default async function handler(req, res) {
   // 4. YouTube: High-speed Vidssave extraction (Direct 1080p, 720p, 480p, 360p & MP3)
   if (videoId) {
     const ytData = await fetchYouTubeVidssave(cleanUrl);
-    if (ytData && ytData.title) {
+    if (ytData && ytData.title && ytData.formats?.video?.some(v => v.directUrl)) {
       return res.status(200).json(ytData);
     }
   }
 
-  // 5. Try Python extractor (yt-dlp) if available locally
-  let pyData = await extractWithPython(cleanUrl);
-
+  // 5. Try Python extractor (yt-dlp) if available locally (for YouTube, Facebook, TikTok, or Instagram)
+  const pyData = await extractWithPython(cleanUrl);
   if (pyData && pyData.title) {
-    const duration = pyData.duration || 60;
-    const detectedPlatform = pyData.platform || platform;
-
-    const videoFormats = (pyData.video_streams || []).map(vs => ({
-      quality: vs.quality,
-      resolution: vs.resolution,
-      format: vs.format || 'mp4',
-      fps: vs.fps || 30,
-      estimatedSize: vs.filesize ? formatBytes(vs.filesize) : calculateEstimatedSize(duration, vs.quality),
-      directUrl: detectedPlatform === 'youtube' ? null : vs.url,
-      note: vs.quality >= 1080 ? (detectedPlatform === 'tiktok' ? 'No Watermark Full HD' : 'Full HD') : 'HD'
-    }));
-
-    const directAudio = detectedPlatform === 'youtube' ? null : pyData.audio_url;
-    const audioFormats = [
-      { quality: '320', bitrate: '320 kbps MP3', format: 'mp3', estimatedSize: calculateEstimatedSize(duration, '320'), directUrl: directAudio, note: 'Studio Quality' },
-      { quality: '256', bitrate: '256 kbps MP3', format: 'mp3', estimatedSize: calculateEstimatedSize(duration, '256'), directUrl: directAudio, note: 'High Definition' },
-      { quality: '128', bitrate: '128 kbps MP3', format: 'mp3', estimatedSize: calculateEstimatedSize(duration, '128'), directUrl: directAudio, note: 'Standard MP3' },
-      { quality: 'm4a', bitrate: 'Original Audio Stream', format: 'm4a', estimatedSize: calculateEstimatedSize(duration, '192'), directUrl: directAudio, note: 'Native Audio' }
-    ];
-
-    const thumbnails = [];
-    if (pyData.thumbnail) {
-      thumbnails.push({
-        resolution: 'Original HD',
-        quality: 'Cover Art / Thumbnail',
-        url: pyData.thumbnail
-      });
-    }
-    if (videoId) {
-      thumbnails.push(
-        { resolution: '1280x720', quality: 'Ultra HD', url: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` },
-        { resolution: '640x480', quality: 'High Quality', url: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` }
-      );
-    }
-
-    return res.status(200).json({
-      id: pyData.id || videoId || `media_${Date.now()}`,
-      url: cleanUrl,
-      platform: detectedPlatform,
-      title: pyData.title,
-      description: pyData.description || '',
-      author: pyData.author,
-      authorUrl: '',
-      duration: duration,
-      durationFormatted: formatDuration(duration),
-      views: pyData.views || 0,
-      viewsFormatted: formatNumber(pyData.views),
-      thumbnail: pyData.thumbnail || (videoId ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` : ''),
-      formats: {
-        video: videoFormats.length > 0 ? videoFormats : [
-          { quality: '1080', resolution: 'Full HD (1080p)', format: 'mp4', fps: 30, estimatedSize: calculateEstimatedSize(duration, '1080'), directUrl: null },
-          { quality: '720', resolution: 'HD (720p)', format: 'mp4', fps: 30, estimatedSize: calculateEstimatedSize(duration, '720'), directUrl: null }
-        ],
-        audio: audioFormats,
-        thumbnails: thumbnails
-      },
-      source: detectedPlatform === 'tiktok' ? 'tikwm-nowm' : 'yt-dlp'
-    });
+    return res.status(200).json(formatPythonResponse(pyData, cleanUrl, platform, videoId));
   }
 
   // 6. YouTube Final Fallback via oEmbed
